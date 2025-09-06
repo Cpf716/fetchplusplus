@@ -98,16 +98,15 @@ namespace fetch {
     // Non-Member Functions
 
     response request(std::map<std::string, std::string>& headers, const std::string url, const std::string method, const std::string body) {
-        // 1 - Map start line
-        // 1.1 - Map method
+        // Begin - Map start line
+        // Map method
         std::stringstream ss(method + " ");
 
-        // Set cursor to the end
+        // Set cursor at the end
         ss.seekp(0, std::ios::end);
 
-        // 1.2 - Map target (path)
-        // 1.2.1 - Parse url
-        // 1.2.1.1 - Find host
+        // Begin - Map target (path)
+        // Begin - Parse host
         int start = 0;
 
         while (start < (int)url.length() - 1 && (url[start] != '/' || url[start + 1] != '/'))
@@ -115,21 +114,24 @@ namespace fetch {
         
         start = start == url.length() - 1 ? 0 : start + 2;
 
-        // 1.2.1.2 - Find target
+        // Parse target
         size_t end = start;
 
         while (end < url.length() && url[end] != '/')
             end++;
 
         std::string host = url.substr(start, end - start);
+        // End - Parse host
 
         // Map target
         ss << url.substr(end) << " ";
+        // End - Map target (path)
 
-        // 1.3 - Map protocol
+        // Map protocol
         ss << "HTTP/1.1\r\n";
+        // End - Map start line
 
-        // 2 - Map request headers
+        // Begin - Map request headers
         for (const auto& [key, value]: headers) {
             // Override content-length and host
             std::string lower_key = tolowers(key);
@@ -142,12 +144,13 @@ namespace fetch {
             ss << key << ": " << value << "\r\n";
         }
 
-        // 2.1 - Map host
+        // Map host
         headers["host"] = host;
 
         ss << "host: " << host << "\r\n";
+        // End - Map request headers
 
-        // 3 - Map body
+        // Map body
         if (body.length()) {
             headers["content-length"] = std::to_string(body.length());
 
@@ -159,40 +162,63 @@ namespace fetch {
 #if LOGGING
        std::cout << ss.str() << std::endl;
 #endif
-        // 4 - Parse host
+        // Begin - Parse host
         std::vector<std::string> components;
 
         split(components, host, ":");
 
-        // No port
         if (components.size() == 1)
-            throw fetch::error(0, "Unknown error");
+            throw fetch::error(0, "port is required");
         
         if (components[0] == "localhost")
             components[0] = "127.0.0.1";
+        // End - Part host
     
-        // 5 - Perform fetch
+        // Begin - Perform fetch
+        std::atomic<bool> recved = false,
+                          nores = false;
+
         try {
             mysocket::tcp_client* client = new mysocket::tcp_client(components[0], parse_int(components[1]));
 
             client->send(ss.str());
 
+            // Begin - Listen for timeout
+            std::thread([&recved, &nores, &client]() {
+                for (size_t i = 0; i < 30 && !recved.load(); i++)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+                if (recved.load())
+                    return;
+
+                nores.store(true);
+
+                // Sever connection
+                client->close();
+            }).detach();
+            // End - Listen for timeout
+
             ss.str(client->recv());
-        
+
+            recved.store(true);
 #if LOGGING
         std::cout << ss.str() << std::endl;
 #endif
 
             client->close();
         } catch (mysocket::error& e) {
+            if (nores.load())
+                throw fetch::error(0, "Unknown error", "Connection timed out");
+
             throw fetch::error(0, "Unknown error", e.what());
         }
 
         // Server disconnected
         if (ss.str().empty())
             throw fetch::error(0, "Unknown error");
+        // End - Perform fetch
 
-        // 6 - Parse response
+        // Begin - Parse response
         std::string str;
 
         getline(ss, str);
@@ -201,15 +227,16 @@ namespace fetch {
 
         ::tokens(tokens, str);
 
-        // 6.1 - Parse status and status text
+        // Begin - Parse status and status text
         size_t      status = stoi(tokens[1]);
         std::string status_text = tokens[2];
 
-        // 6.1.1 - Merge status_text
+        // Merge status_text
         for (size_t i = 3; i < tokens.size(); i++)
             status_text += " " + tokens[i];
+        // End - Parse status and status text
 
-        // 6.2 - Parse response headers
+        // Parse response headers
         std::map<std::string, std::string> _headers;
 
         while (getline(ss, str)) {
@@ -225,7 +252,7 @@ namespace fetch {
             _headers[tolowers(header[0])] = trim(header[1]);
         }
 
-        // 6.3 - Parse response body
+        // Parse response body
         std::string        text;
         std::ostringstream oss;
 
@@ -234,14 +261,14 @@ namespace fetch {
 
         std::string content_length = _headers["content-length"];
         size_t      _content_length = content_length.length() ?
-            stoi(content_length) :
-            _headers["transfer-encoding"] == "chunked" ?
-            oss.str().length() :
-            0;
+                        stoi(content_length) :
+                        _headers["transfer-encoding"] == "chunked" ?
+                        oss.str().length() :
+                        0;
 
         text = oss.str().substr(0, _content_length);
 
-        // 7 - Send response
+        // Send response
         if (status < 200 || status >= 400)
             throw fetch::error(status, status_text, text, _headers);
 
