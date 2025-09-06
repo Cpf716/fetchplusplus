@@ -10,12 +10,17 @@
 
 using namespace fetch;
 using namespace json;
+using namespace mysocket;
 using namespace std;
 
 map<string, string> headers = {{ "content-type", "application/json" }};
 
 int main(int argc, const char * argv[]) {
+    // auto server = new tcp_server(8082);
+
     string url = "http://localhost:8081/greeting";
+    // string url = "http://localhost:8082/greeting";
+
     string method = "POST";
     auto   body = new object((vector<object*>) {
         new object("firstName", encode("Corey")),
@@ -31,6 +36,8 @@ int main(int argc, const char * argv[]) {
             cout << response.text() << endl;
         }
     } catch (fetch::error& e) {
+        // server->close();
+
         if (e.text().length())
             throw fetch::error(e.status(), e.text(), e.text(), e.headers());
         
