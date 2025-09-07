@@ -1,8 +1,8 @@
-# Fetch-JSON SDK for C++
+# Fetch-JSON SDK
 
-Thank you for choosing the <i>Fetch-JSON SDK for C++</i>.
+Thank you for checking out the <i>Fetch-JSON SDK</i>!
 
-It combines two existing SDKs <i>fetch</i> and <i>json</i>, enabling C++ developers to natively handle HTTP requests end-to-end for low-level integration.
+It combines two powerful SDKs <i>fetch</i> and <i>json</i>, equipping C++ developers with a native HTTP client for REST APIs.
 
 # Setup
 1. Open the project in VS Code and navigate to the integrated terminal
@@ -45,18 +45,29 @@ node test-server/src/index.js
 ## Reference
 
 ```
-string              url = "http://localhost:8080/greeting";
-string              method = "POST";
-auto                body = new object((vector<object*>) {
-    new object("firstName", encode("Corey")),
-});
+#include "fetch.h"
+#include "json.h"
+
+using namespace fetch;
+using namespace json;
+using namespace std;
+
 map<string, string> headers = {{ "content-type", "application/json" }};
 
-try {
-    auto response = request(headers, url, method, stringify(body));
+int main(int argc, const char* argv[]) {
+    string url = "http://localhost:8081/greeting";
 
-    cout << stringify(response.json()) << endl;
-} catch (fetch::error& e) {
-    throw e;
+    string method = "POST";
+    auto   body = new object((vector<object*>) {
+        new object("firstName", encode("Corey")),
+    });
+
+    try {
+        auto response = request(headers, url, method, stringify(body));
+        
+        cout << stringify(response.json()) << endl;
+    } catch (fetch::error& e) {
+        throw e;
+    }
 }
 ```
