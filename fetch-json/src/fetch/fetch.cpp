@@ -95,6 +95,10 @@ namespace fetch {
         return this->_status_text.c_str();
     }
 
+    // Non-Member Fields
+
+    size_t _timeout = 30;
+
     // Non-Member Functions
 
     response request(std::map<std::string, std::string>& headers, const std::string url, const std::string method, const std::string body) {
@@ -102,7 +106,7 @@ namespace fetch {
         // Map method
         std::stringstream ss(method + " ");
 
-        // Set cursor at the end
+        // Set cursor to the end
         ss.seekp(0, std::ios::end);
 
         // Begin - Map target (path)
@@ -120,11 +124,12 @@ namespace fetch {
         while (end < url.length() && url[end] != '/')
             end++;
 
-        std::string host = url.substr(start, end - start);
+        std::string host = url.substr(start, end - start),
+                    target = url.substr(end);
         // End - Parse host
 
         // Map target
-        ss << url.substr(end) << " ";
+        ss << target << " ";
         // End - Map target (path)
 
         // Map protocol
@@ -132,32 +137,34 @@ namespace fetch {
         // End - Map start line
 
         // Begin - Map request headers
+        // Sanitize headers
         for (const auto& [key, value]: headers) {
-            // Override content-length and host
             std::string lower_key = tolowers(key);
 
-            if (lower_key == "content-length" || lower_key == "host") {
+            if (lower_key == "content-length" || lower_key == "host")
                 headers.erase(key);
-                continue;
-            }
-
-            ss << key << ": " << value << "\r\n";
         }
-
+        
         // Map host
-        headers["host"] = host;
-
         ss << "host: " << host << "\r\n";
+
+        // Map request headers
+        if (body.length())
+            headers["content-length"] = std::to_string(body.length());
+
+        for (const auto& [key, value]: headers)
+            ss << key << ": " << value << "\r\n";
+
+        headers["host"] = host;
         // End - Map request headers
 
         // Map body
         if (body.length()) {
-            headers["content-length"] = std::to_string(body.length());
-
-            ss << "content-length: " << body.length() << "\r\n\r\n";
-            ss << body << "\r\n";
-        } else
             ss << "\r\n";
+            ss << body << "\r\n";
+        }
+
+        ss << "\r\n";
 
 #if LOGGING
        std::cout << ss.str() << std::endl;
@@ -175,8 +182,7 @@ namespace fetch {
         // End - Part host
     
         // Begin - Perform fetch
-        std::atomic<bool> recved = false,
-                          nores = false;
+        std::atomic<bool> nores = true;
 
         try {
             mysocket::tcp_client* client = new mysocket::tcp_client(components[0], parse_int(components[1]));
@@ -184,23 +190,23 @@ namespace fetch {
             client->send(ss.str());
 
             // Begin - Listen for timeout
-            std::thread([&recved, &nores, &client]() {
-                for (size_t i = 0; i < 30 && !recved.load(); i++)
+            std::thread([&nores, &client]() {
+                for (size_t i = 0; i < timeout() && nores.load(); i++)
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-                if (recved.load())
-                    return;
+                if (nores.load()) {
+                    nores.store(false);
 
-                nores.store(true);
-
-                // Sever connection
-                client->close();
+                    // Sever connection
+                    client->close();
+                }
             }).detach();
             // End - Listen for timeout
 
             ss.str(client->recv());
 
-            recved.store(true);
+            nores.store(false);
+            
 #if LOGGING
         std::cout << ss.str() << std::endl;
 #endif
@@ -208,9 +214,9 @@ namespace fetch {
             client->close();
         } catch (mysocket::error& e) {
             if (nores.load())
-                throw fetch::error(0, "Unknown error", "Connection timed out");
+                throw fetch::error(0, "Unknown error", e.what());
 
-            throw fetch::error(0, "Unknown error", e.what());
+            throw fetch::error(0, "Unknown error", "Connection timed out");
         }
 
         // Server disconnected
@@ -273,5 +279,9 @@ namespace fetch {
             throw fetch::error(status, status_text, text, _headers);
 
         return fetch::response(status, status_text, _headers, text);
+    }
+
+    size_t& timeout() {
+        return _timeout;
     }
 }
