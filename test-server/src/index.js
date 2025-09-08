@@ -52,6 +52,7 @@ const main = () => {
 
             res.setHeader("content-type", "text/plain").send(greeting.create(req.body));   
         },
+        doNotReply: (c, req, res) => {},
         ping: (c, req, res) => res.send({ message: "Hello, world!"}),
         notFound: (c, req, res) => res.status(404).json(`Cannot ${req.method} ${req.url}`)
     })

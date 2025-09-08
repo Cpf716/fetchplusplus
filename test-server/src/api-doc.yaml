@@ -34,6 +34,34 @@ paths:
             application/json:
               schema:
                 type: string
+
+  "/no-reply":
+    get:
+      operationId: doNotReply
+      responses:
+        "200":
+          description: Successful request
+    post:
+      operationId: doNotReply
+      responses:
+        "200":
+          description: Successful request
+    put:
+      operationId: doNotReply
+      responses:
+        "200":
+          description: Successful request
+    patch:
+      operationId: doNotReply
+      responses:
+        "200":
+          description: Successful request
+    delete:
+      operationId: doNotReply
+      responses:
+        "200":
+          description: Successful request
+
   "/ping":
     get:
       operationId: ping

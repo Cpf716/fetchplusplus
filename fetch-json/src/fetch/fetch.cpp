@@ -10,49 +10,133 @@
 namespace fetch {
     // Constructors
 
-    error::error(
-        const size_t status,
-        const std::string status_text,
-        const std::string text,
-        std::map<std::string, std::string> headers
-    ) {
+    error::error(const size_t status, const std::string status_text, const std::string text, fetch::header::map headers) {
         this->_status = status;
         this->_status_text = status_text;
         this->_text = text;
         this->_headers = headers;
     }
 
-    response::response(
-        const size_t status,
-        const std::string status_text,
-        std::map<std::string, std::string> headers,
-        const std::string text
-    ) {
+    response::response(const size_t status, const std::string status_text, fetch::header::map headers, const std::string text) {
         this->_status = status;
         this->_status_text = status_text;
         this->_headers = headers;
         this->_text = text;
+    }
+
+    header::value::value() {
+        this->_str = "";
+    }
+
+    header::value::value(const int value) {
+        this->_int = value;
+        this->_str = std::to_string(this->_int);
+        this->_parsed = true;
+    }
+
+    header::value::value(const std::string value) {
+        this->_str = value;
     }
 
     response::~response() {
         delete this->_json;
     }
 
+    // Operators
+
+    header::value::operator int() {
+        int value;
+
+        this->get(value);
+
+        return value;
+    }
+
+    header::value::operator std::string() {
+        return this->get();
+    }
+
+    int header::value::operator=(const int value) {
+        this->_set(value);
+
+        return this->_int;
+    }
+
+    std::string header::value::operator=(const std::string value) {
+        this->_set(value);
+
+        return this->_str;
+    }
+
+    bool header::value::operator==(const int value) {
+        int _value;
+
+        this->get(_value);
+
+        return _value == value;
+    }
+
+    bool header::value::operator==(const std::string value) {
+        return this->get() == value;
+    }
+
+    bool header::value::operator==(const struct value value) {
+        return this->get() == value.get();
+    }
+
+    bool header::value::operator!=(const int value) {
+        return !(*this == value);
+    }
+
+    bool header::value::operator!=(const std::string value) {
+        return !(*this == value);
+    }
+
+    bool header::value::operator!=(const struct value value) {
+        return !(*this == value);
+    }
+
     // Member Functions
 
-    std::string error::get(const std::string key) {
+    int header::value::_set(const int value) {
+        this->_int = value;
+        this->_str = std::to_string(this->_int);
+
+        return this->_int;
+    }
+
+    std::string header::value::_set(const std::string value) {
+        this->_str = value;
+        
+        return this->_str;
+    }
+
+    header::value error::get(const std::string key) {
         return this->_headers[key];
     }
 
-    std::string response::get(const std::string key) {
+    header::value response::get(const std::string key) {
         return this->_headers[key];
     }
 
-    std::map<std::string, std::string> error::headers() {
+    std::string header::value::get() const {
+        return this->_str;
+    }
+
+    void header::value::get(int& value) {
+        if (!this->_parsed) {
+            this->_int = parse_int(this->_str);
+            this->_parsed = true;
+        }
+
+        value = this->_int;
+    }
+
+    fetch::header::map error::headers() {
         return this->_headers;
     }
 
-    std::map<std::string, std::string> response::headers() {
+    fetch::header::map response::headers() {
         return this->_headers;
     }
 
@@ -101,7 +185,7 @@ namespace fetch {
 
     // Non-Member Functions
 
-    response request(std::map<std::string, std::string>& headers, const std::string url, const std::string method, const std::string body) {
+    response request(fetch::header::map& headers, const std::string url, const std::string method, const std::string body) {
         // Begin - Map start line
         // Map method
         std::stringstream ss(method + " ");
@@ -150,10 +234,10 @@ namespace fetch {
 
         // Map request headers
         if (body.length())
-            headers["content-length"] = std::to_string(body.length());
+            headers["content-length"] = (int)body.length();
 
         for (const auto& [key, value]: headers)
-            ss << key << ": " << value << "\r\n";
+            ss << key << ": " << value.get() << "\r\n";
 
         headers["host"] = host;
         // End - Map request headers
@@ -244,7 +328,7 @@ namespace fetch {
         // End - Parse status and status text
 
         // Parse response headers
-        std::map<std::string, std::string> _headers;
+        header::map _headers;
 
         while (getline(ss, str)) {
             std::vector<std::string> header;
@@ -266,12 +350,15 @@ namespace fetch {
         while (getline(ss, text))
             oss << trim_end(text) << "\r\n";
 
-        std::string content_length = _headers["content-length"];
-        size_t      _content_length = content_length.length() ?
-                        stoi(content_length) :
-                        _headers["transfer-encoding"] == "chunked" ?
-                        oss.str().length() :
-                        0;
+        int content_length;
+
+        _headers["content-length"].get(content_length);
+
+        size_t _content_length = content_length == INT_MIN ?
+                _headers["transfer-encoding"] == "chunked" ?
+                oss.str().length() :
+                0 :
+                content_length;
 
         text = oss.str().substr(0, _content_length);
 
