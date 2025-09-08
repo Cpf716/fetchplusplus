@@ -25,21 +25,23 @@ namespace fetch {
     }
 
     header::value::value() {
-        this->_str = "";
+        this->_set("");
     }
 
     header::value::value(const char* value) {
-        this->_str = std::string(value);
+        this->_set(std::string(value));
     }
 
     header::value::value(const int value) {
-        this->_int = value;
-        this->_str = std::to_string(this->_int);
-        this->_parsed = true;
+        this->_set(value);
     }
 
     header::value::value(const std::string value) {
-        this->_str = value;
+        this->_set(value);
+    }
+
+    header::value::value(const std::vector<std::string> value) {
+        this->_set(value);
     }
 
     response::~response() {
@@ -60,16 +62,20 @@ namespace fetch {
         return this->get();
     }
 
-    int header::value::operator=(const int value) {
-        this->_set(value);
+    header::value::operator std::vector<std::string>() {
+        return this->_arr;
+    }
 
-        return this->_int;
+    int header::value::operator=(const int value) {
+        return this->_set(value);
     }
 
     std::string header::value::operator=(const std::string value) {
-        this->_set(value);
+        return this->_set(value);
+    }
 
-        return this->_str;
+    std::vector<std::string> header::value::operator=(const std::vector<std::string> value) {
+        return this->_set(value);
     }
 
     bool header::value::operator==(const char* value) {
@@ -111,8 +117,10 @@ namespace fetch {
     // Member Functions
 
     int header::value::_set(const int value) {
+        this->_parsed = true;
         this->_int = value;
         this->_str = std::to_string(this->_int);
+        this->_arr.push_back(this->get());
 
         return this->_int;
     }
@@ -121,6 +129,23 @@ namespace fetch {
         this->_str = value;
         
         return this->_str;
+    }
+
+    std::vector<std::string> header::value::_set(const std::vector<std::string> value) {
+        this->_arr = value;
+
+        std::ostringstream oss;
+        
+        if (this->_arr.size()) {
+            for (size_t i = 0; i < this->_arr.size() - 1; i++)
+                oss << this->_arr[i] << ", ";
+
+            oss << this->_arr[this->_arr.size() - 1];
+        }
+            
+        this->_set(oss.str());
+
+        return this->_arr;
     }
 
     header::value error::get(const std::string key) {
@@ -142,6 +167,11 @@ namespace fetch {
         }
 
         value = this->_int;
+    }
+
+    void header::value::get(std::vector<std::string>& value) {
+        for (std::string str: this->_arr)
+            value.push_back(str);
     }
 
     fetch::header::map error::headers() {
