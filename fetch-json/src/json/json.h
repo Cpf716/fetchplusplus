@@ -150,9 +150,9 @@ namespace json {
         // Typedef
 
         struct iterator {
-            // Constructors
+            // Typdef
 
-            iterator(const size_t size, std::vector<object*> values);
+            friend json::array;
 
             // Operators
 
@@ -176,6 +176,10 @@ namespace json {
 
             bool      operator!=(const iterator& value) const;
         private:
+            // Constructors
+
+            iterator(const size_t size, std::vector<object*> values);
+
             // Member Fields
 
             int                  _index = 0;

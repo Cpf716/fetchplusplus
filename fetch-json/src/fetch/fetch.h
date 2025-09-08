@@ -15,67 +15,113 @@
 namespace fetch {
     // Typedef
 
+    namespace header {
+        // Typdef
+
+        struct value {
+            // Constructors
+
+            value();
+
+            value(const int value);
+
+            value(const std::string value);
+
+            // Operators
+
+            operator    int();
+
+            operator    std::string();
+
+            int         operator=(const int value);
+
+            std::string operator=(const std::string value);
+
+            bool        operator==(const int value);
+
+            bool        operator==(const std::string value);
+
+            bool        operator==(const struct value value);
+
+            bool        operator!=(const int value);
+
+            bool        operator!=(const std::string value);
+
+            bool        operator!=(const struct value value);
+
+            // Member Functions
+
+            std::string get() const;
+
+            void        get(int& value);
+        private:
+            // Member Fields
+
+            int         _int;
+            bool        _parsed = false;
+            std::string _str;
+
+            // Member Functions
+
+            int         _set(const int value);
+            
+            std::string _set(const std::string value);
+        };
+
+        using map = std::map<std::string, header::value>;
+    };
+
     struct response_t {
         // Member Functions
 
         /**
          * Return response header
          */
-        virtual std::string                        get(const std::string key) = 0;
+        virtual header::value get(const std::string key) = 0;
 
-        virtual std::map<std::string, std::string> headers() = 0;
+        virtual header::map   headers() = 0;
 
-        virtual size_t                             status() const = 0;
+        virtual size_t        status() const = 0;
 
-        virtual std::string                        status_text() const = 0;
+        virtual std::string   status_text() const = 0;
 
-        virtual std::string                        text() const = 0;
+        virtual std::string   text() const = 0;
     };
 
     struct error: public std::exception, public response_t {
         // Constructors
 
-        error(
-            const size_t                       status,
-            const std::string                  status_text,
-            const std::string                  text = "",
-            std::map<std::string, std::string> headers = {}
-        );
+        error(const size_t status, const std::string status_text, const std::string text = "", header::map headers = {});
 
         // Member Functions
 
         /**
          * Return response header
          */
-        std::string                        get(const std::string key);
+        header::value get(const std::string key);
 
-        std::map<std::string, std::string> headers();
+        header::map   headers();
 
-        size_t                             status() const;
+        size_t        status() const;
 
-        std::string                        status_text() const;
+        std::string   status_text() const;
 
-        std::string                        text() const;
+        std::string   text() const;
 
-        const char*                        what() const throw();
+        const char*   what() const throw();
     private:
         // Member Fields
 
-        std::map<std::string, std::string> _headers;
-        size_t                             _status;
-        std::string                        _status_text;
-        std::string                        _text;
+        header::map _headers;
+        size_t      _status;
+        std::string _status_text;
+        std::string _text;
     };
 
     struct response: public response_t {
         // Constructors
 
-        response(
-            const size_t                       status,
-            const std::string                  status_text,
-            std::map<std::string, std::string> headers,
-            const std::string                  text
-        );
+        response(const size_t status, const std::string status_text, header::map headers, const std::string text);
 
         ~response();
 
@@ -84,40 +130,35 @@ namespace fetch {
         /**
          * Return response header
          */
-        std::string                        get(const std::string key);
+        header::value get(const std::string key);
 
-        std::map<std::string, std::string> headers();
+        header::map   headers();
 
-        json::object*                      json();
+        json::object* json();
 
-        size_t                             status() const;
+        size_t        status() const;
 
-        std::string                        status_text() const;
+        std::string   status_text() const;
 
-        std::string                        text() const;
+        std::string   text() const;
     private:
         // Member Fields
         
-        std::map<std::string, std::string> _headers;
-        json::object*                      _json = NULL;
-        size_t                             _status;
-        std::string                        _status_text;
-        std::string                        _text;
+        header::map   _headers;
+        json::object* _json = NULL;
+        size_t        _status;
+        std::string   _status_text;
+        std::string   _text;
     };
 
     // Non-Member Functions
     
-    response request(
-        std::map<std::string, std::string>& headers,
-        const std::string                   url,
-        const std::string                   method = "GET",
-        const std::string                   body = ""
-    );
+    response request(header::map& headers, const std::string url, const std::string method = "GET", const std::string body = "");
 
     /**
      * Returns request timeout
      */
-    size_t& timeout();
+    size_t&  timeout();
 }
 
 #endif /* fetch_h */

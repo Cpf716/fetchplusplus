@@ -58,6 +58,7 @@
         "algorithm": "cpp",
         "charconv": "cpp",
         "csignal": "cpp",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "iterator": "cpp"
     }
 }

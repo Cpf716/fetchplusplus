@@ -153,7 +153,7 @@ bool is_int(const std::string value) {
     
     // leading positive (+) or negative (-) sign
     if (i != value.length() && (value[i] == '+' || value[i] == '-'))
-        ++i;
+        i++;
     
     if (i == value.length())
         return false;
@@ -176,13 +176,13 @@ bool is_number(const std::string value) {
     
     // leading positive (+) or negative (-) sign
     if (value[i] == '+' || value[i] == '-')
-        ++i;
+        i++;
     
     // find decimal point
     int j = i;
     
     while (j < value.length() && value[j] != '.')
-        ++j;
+        j++;
     
     // if no decimal point is found, start at the beginning (after the sign, if applicable)
     // find exponent
