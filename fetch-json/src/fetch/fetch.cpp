@@ -28,6 +28,10 @@ namespace fetch {
         this->_str = "";
     }
 
+    header::value::value(const char* value) {
+        this->_str = std::string(value);
+    }
+
     header::value::value(const int value) {
         this->_int = value;
         this->_str = std::to_string(this->_int);
@@ -68,6 +72,10 @@ namespace fetch {
         return this->_str;
     }
 
+    bool header::value::operator==(const char* value) {
+        return this->get() == std::string(value);
+    }
+
     bool header::value::operator==(const int value) {
         int _value;
 
@@ -82,6 +90,10 @@ namespace fetch {
 
     bool header::value::operator==(const struct value value) {
         return this->get() == value.get();
+    }
+
+    bool header::value::operator!=(const char* value) {
+        return !(*this == value);
     }
 
     bool header::value::operator!=(const int value) {
@@ -374,7 +386,7 @@ namespace fetch {
                 response_headers["transfer-encoding"] == "chunked" ?
                 oss.str().length() :
                 0 :
-                _content_length);
+                std::min(_content_length, (int)oss.str().length()));
 
         // Send response
         if (status < 200 || status >= 400)

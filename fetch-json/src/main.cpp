@@ -12,7 +12,7 @@ using namespace fetch;
 using namespace json;
 using namespace std;
 
-header::map headers = {{ "content-type", header::value("application/json") }};
+header::map headers = {{ "content-type", "application/json" }};
 
 int main(int argc, const char * argv[]) {
     string url = "http://localhost:8081/greeting";
