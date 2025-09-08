@@ -195,6 +195,7 @@ namespace fetch {
 
         // Begin - Map target (path)
         // Begin - Parse host
+        // Find host
         int start = 0;
 
         while (start < (int)url.length() - 1 && (url[start] != '/' || url[start + 1] != '/'))
@@ -202,17 +203,29 @@ namespace fetch {
         
         start = start == url.length() - 1 ? 0 : start + 2;
 
-        // Parse target
+        // Find target
         size_t end = start;
 
         while (end < url.length() && url[end] != '/')
             end++;
 
-        std::string host = url.substr(start, end - start),
-                    target = url.substr(end);
+        // Parse host
+        std::vector<std::string> host;
+
+        split(host, url.substr(start, end - start), ":");
+
+        if (host.size() == 1)
+            throw fetch::error(0, "port is required");
+        
+        if (host[0] == "localhost")
+            host[0] = "127.0.0.1";
+
+        std::string _host = host[0] + ":" + host[1];
         // End - Parse host
 
         // Map target
+        std::string target = url.substr(end);
+
         ss << target << " ";
         // End - Map target (path)
 
@@ -230,7 +243,7 @@ namespace fetch {
         }
         
         // Map host
-        ss << "host: " << host << "\r\n";
+        ss << "host: " << _host << "\r\n";
 
         // Map request headers
         if (body.length())
@@ -239,7 +252,7 @@ namespace fetch {
         for (const auto& [key, value]: headers)
             ss << key << ": " << value.get() << "\r\n";
 
-        headers["host"] = host;
+        headers["host"] = _host;
         // End - Map request headers
 
         // Map body
@@ -253,23 +266,12 @@ namespace fetch {
 #if LOGGING
        std::cout << ss.str() << std::endl;
 #endif
-        // Begin - Parse host
-        std::vector<std::string> components;
 
-        split(components, host, ":");
-
-        if (components.size() == 1)
-            throw fetch::error(0, "port is required");
-        
-        if (components[0] == "localhost")
-            components[0] = "127.0.0.1";
-        // End - Part host
-    
         // Begin - Perform fetch
         std::atomic<bool> recved = false;
 
         try {
-            mysocket::tcp_client* client = new mysocket::tcp_client(components[0], parse_int(components[1]));
+            mysocket::tcp_client* client = new mysocket::tcp_client(host[0], parse_int(host[1]));
 
             client->send(ss.str());
 
