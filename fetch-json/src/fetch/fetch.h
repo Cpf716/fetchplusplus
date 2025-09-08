@@ -29,49 +29,60 @@ namespace fetch {
 
             value(const std::string value);
 
+            value(const std::vector<std::string> value);
+
             // Operators
 
-            operator    int();
+            operator                 int();
 
-            operator    std::string();
+            operator                 std::string();
 
-            int         operator=(const int value);
+            operator                 std::vector<std::string>();
 
-            std::string operator=(const std::string value);
+            int                      operator=(const int value);
 
-            bool        operator==(const char* value);
+            std::string              operator=(const std::string value);
 
-            bool        operator==(const int value);
+            std::vector<std::string> operator=(const std::vector<std::string> value);
 
-            bool        operator==(const std::string value);
+            bool                     operator==(const char* value);
 
-            bool        operator==(const struct value value);
+            bool                     operator==(const int value);
 
-            bool        operator!=(const char* value);
+            bool                     operator==(const std::string value);
 
-            bool        operator!=(const int value);
+            bool                     operator==(const struct value value);
 
-            bool        operator!=(const std::string value);
+            bool                     operator!=(const char* value);
 
-            bool        operator!=(const struct value value);
+            bool                     operator!=(const int value);
+
+            bool                     operator!=(const std::string value);
+
+            bool                     operator!=(const struct value value);
 
             // Member Functions
 
             std::string get() const;
 
             void        get(int& value);
+
+            void        get(std::vector<std::string>& value);
         private:
             // Member Fields
 
-            int         _int;
-            bool        _parsed = false;
-            std::string _str;
+            int                      _int;
+            bool                     _parsed = false;
+            std::string              _str;
+            std::vector<std::string> _arr;
 
             // Member Functions
 
-            int         _set(const int value);
+            int                      _set(const int value);
             
-            std::string _set(const std::string value);
+            std::string              _set(const std::string value);
+
+            std::vector<std::string> _set(const std::vector<std::string> value);
         };
 
         using map = std::map<std::string, header::value>;

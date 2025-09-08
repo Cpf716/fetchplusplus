@@ -12,14 +12,17 @@ using namespace fetch;
 using namespace json;
 using namespace std;
 
-header::map headers = {{ "content-type", "application/json" }};
-
 int main(int argc, const char * argv[]) {
-    string url = "http://localhost:8081/greeting";
-    // string url = "http://localhost:8081/no-reply";
+    header::map headers = {
+        { "content-type", "application/json" },
+        { "accept", (vector<string>){ "application/json", "text/plain" }}
+    };
+    
+    string      url = "http://localhost:8081/greeting";
+    // string      url = "http://localhost:8081/no-reply";
 
-    string method = "POST";
-    auto   body = new object((vector<object*>) {
+    string      method = "POST";
+    auto        body = new object((vector<object*>) {
         new object("firstName", encode("Corey")),
         // new object("lastName", encode("Ferguson"))
     });
