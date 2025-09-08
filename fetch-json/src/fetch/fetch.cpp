@@ -219,8 +219,6 @@ namespace fetch {
         
         if (host[0] == "localhost")
             host[0] = "127.0.0.1";
-
-        std::string _host = host[0] + ":" + host[1];
         // End - Parse host
 
         // Map target
@@ -234,21 +232,38 @@ namespace fetch {
         // End - Map start line
 
         // Begin - Map request headers
-        // Sanitize headers
-        for (const auto& [key, value]: headers) {
-            std::string lower_key = tolowers(key);
+        auto get = [&headers](std::string& key) {
+            for (const auto& [_key, value]: headers)
+                if (tolowers(_key) == key)
+                    return value;
 
-            if (lower_key == "content-length" || lower_key == "host")
-                headers.erase(key);
-        }
-        
+            return header::value();
+        };
+
+        // Map host
+        std::string key = "host",
+                    _host = get(key);
+
+        // Generate host, if required
+        if (_host.empty())
+            _host = host[0] + ":" + host[1];
+
+        headers.erase(key);
+
         // Map host
         ss << "host: " << _host << "\r\n";
 
-        // Map request headers
-        if (body.length())
-            headers["content-length"] = (int)body.length();
+        // Generate content-length, if required
+        key = "content-length";
 
+        if (get(key).get().empty()) {
+            headers.erase(key);
+
+            if (body.length())
+                headers["content-length"] = (int)body.length();
+        }       
+
+        // Map request headers
         for (const auto& [key, value]: headers)
             ss << key << ": " << value.get() << "\r\n";
 
@@ -330,7 +345,7 @@ namespace fetch {
         // End - Parse status and status text
 
         // Parse response headers
-        header::map _headers;
+        header::map response_headers;
 
         while (getline(ss, str)) {
             std::vector<std::string> header;
@@ -342,7 +357,7 @@ namespace fetch {
                 break;
 
             // Case-insensitive
-            _headers[tolowers(header[0])] = trim(header[1]);
+            response_headers[tolowers(header[0])] = trim(header[1]);
         }
 
         // Parse response body
@@ -352,23 +367,20 @@ namespace fetch {
         while (getline(ss, text))
             oss << trim_end(text) << "\r\n";
 
-        int content_length;
+        int _content_length;
 
-        _headers["content-length"].get(content_length);
-
-        size_t _content_length = content_length == INT_MIN ?
-                _headers["transfer-encoding"] == "chunked" ?
+        response_headers["content-length"].get(_content_length);
+        text = oss.str().substr(0, _content_length == INT_MIN ?
+                response_headers["transfer-encoding"] == "chunked" ?
                 oss.str().length() :
                 0 :
-                content_length;
-
-        text = oss.str().substr(0, _content_length);
+                _content_length);
 
         // Send response
         if (status < 200 || status >= 400)
-            throw fetch::error(status, status_text, text, _headers);
+            throw fetch::error(status, status_text, text, response_headers);
 
-        return fetch::response(status, status_text, _headers, text);
+        return fetch::response(status, status_text, response_headers, text);
     }
 
     size_t& timeout() {
