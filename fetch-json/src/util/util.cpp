@@ -7,6 +7,26 @@
 
 #include "util.h"
 
+int decimal(const std::string hex) {
+    int result = 0;
+
+    for (size_t i = 0; i < hex.length(); i++) {
+        int start = hex[i] >= '0' && hex[i] <= '9' ? 
+                    48 : 
+                    hex[i] >= 'A' && hex[i] <= 'Z' ? 
+                    55 : hex[i] >= 'a' && hex[i] <= 'z' ? 
+                    87 : 
+                    INT_MIN;
+
+        if (start == INT_MIN)
+            return INT_MIN;
+
+        result += (hex[i] - start) * pow(16, hex.length() - i - 1);
+    }
+
+    return result;
+}
+
 std::string decode(const std::string string) {
     if (string.empty())
         return string;
@@ -263,6 +283,19 @@ bool is_string_literal(const std::string value) {
         i++;
 
     return i != value.length();
+}
+
+std::string join(std::vector<std::string> values, std::string delimeter) {
+    std::ostringstream oss;
+        
+    if (values.size()) {
+        for (size_t i = 0; i < values.size() - 1; i++)
+            oss << values[i] << delimeter;
+
+        oss << values[values.size() - 1];
+    }
+        
+    return oss.str();
 }
 
 void merge(std::vector<std::string>& values, const std::string delimiter) {
