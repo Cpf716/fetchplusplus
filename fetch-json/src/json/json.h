@@ -8,9 +8,9 @@
 #ifndef json_h
 #define json_h
 
+#include "util.h"
 #include <cassert>
 #include <map>
-#include "util.h"
 
 namespace json {
     // Typedef

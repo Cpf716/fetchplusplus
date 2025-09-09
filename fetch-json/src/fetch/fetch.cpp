@@ -10,38 +10,52 @@
 namespace fetch {
     // Constructors
 
-    error::error(const size_t status, const std::string status_text, const std::string text, fetch::header::map headers) {
+    error::error(
+        const size_t status,
+        const std::string status_text,
+        const std::string text,
+        header::map headers,
+        trailer::map trailers
+    ) {
         this->_status = status;
         this->_status_text = status_text;
         this->_text = text;
         this->_headers = headers;
+        this->_trailers = trailers;
     }
 
-    response::response(const size_t status, const std::string status_text, fetch::header::map headers, const std::string text) {
-        this->_status = status;
-        this->_status_text = status_text;
-        this->_headers = headers;
-        this->_text = text;
-    }
-
-    header::value::value() {
+    header::header() {
         this->_set("");
     }
 
-    header::value::value(const char* value) {
+    header::header(const char* value) {
         this->_set(std::string(value));
     }
 
-    header::value::value(const int value) {
+    header::header(const int value) {
         this->_set(value);
     }
 
-    header::value::value(const std::string value) {
+    header::header(const std::string value) {
         this->_set(value);
     }
 
-    header::value::value(const std::vector<std::string> value) {
+    header::header(const std::vector<std::string> value) {
         this->_set(value);
+    }
+
+    response::response(
+        const size_t status,
+        const std::string status_text,
+        header::map headers,
+        const std::string text,
+        trailer::map trailers
+    ) {
+        this->_status = status;
+        this->_status_text = status_text;
+        this->_headers = headers;
+        this->_text = text;
+        this->_trailers = trailers;
     }
 
     response::~response() {
@@ -50,65 +64,65 @@ namespace fetch {
 
     // Operators
 
-    header::value::operator int() {
+    header::operator int() {
         return this->int_value();
     }
 
-    header::value::operator std::string() {
+    header::operator std::string() {
         return this->str();
     }
 
-    header::value::operator std::vector<std::string>() {
+    header::operator std::vector<std::string>() {
         return this->list();
     }
 
-    int header::value::operator=(const int value) {
+    int header::operator=(const int value) {
         return this->_set(value);
     }
 
-    std::string header::value::operator=(const std::string value) {
+    std::string header::operator=(const std::string value) {
         return this->_set(value);
     }
 
-    std::vector<std::string> header::value::operator=(const std::vector<std::string> value) {
+    std::vector<std::string> header::operator=(const std::vector<std::string> value) {
         return this->_set(value);
     }
 
-    bool header::value::operator==(const char* value) {
+    bool header::operator==(const char* value) {
         return this->str() == std::string(value);
     }
 
-    bool header::value::operator==(const int value) {
+    bool header::operator==(const int value) {
         return this->int_value() == value;
     }
 
-    bool header::value::operator==(const std::string value) {
+    bool header::operator==(const std::string value) {
         return this->str() == value;
     }
 
-    bool header::value::operator==(const struct value value) {
+    bool header::operator==(const header value) {
         return this->str() == value.str();
     }
 
-    bool header::value::operator!=(const char* value) {
+    bool header::operator!=(const char* value) {
         return !(*this == value);
     }
 
-    bool header::value::operator!=(const int value) {
+    bool header::operator!=(const int value) {
         return !(*this == value);
     }
 
-    bool header::value::operator!=(const std::string value) {
+    bool header::operator!=(const std::string value) {
         return !(*this == value);
     }
 
-    bool header::value::operator!=(const struct value value) {
+    bool header::operator!=(const header value) {
         return !(*this == value);
     }
 
     // Member Functions
 
-    int header::value::_set(const int value) {
+    int header::_set(const int value) {
         this->_parsed = true;
         this->_int = value;
         this->_str = std::to_string(this->_int);
@@ -117,46 +131,36 @@ namespace fetch {
         return this->_int;
     }
 
-    std::string header::value::_set(const std::string value) {
+    std::string header::_set(const std::string value) {
         this->_str = value;
         
         return this->str();
     }
 
-    std::vector<std::string> header::value::_set(const std::vector<std::string> value) {
+    std::vector<std::string> header::_set(const std::vector<std::string> value) {
         this->_list = value;
-
-        std::ostringstream oss;
-        
-        if (this->_list.size()) {
-            for (size_t i = 0; i < this->_list.size() - 1; i++)
-                oss << this->_list[i] << ", ";
-
-            oss << this->_list[this->_list.size() - 1];
-        }
-            
-        this->_set(oss.str());
+        this->_set(join(this->_list, ", "));
 
         return this->_list;
     }
 
-    header::value error::get(const std::string key) {
+    header error::get(const std::string key) {
         return this->_headers[key];
     }
 
-    header::value response::get(const std::string key) {
+    header response::get(const std::string key) {
         return this->_headers[key];
     }
 
-    fetch::header::map error::headers() {
+    header::map error::headers() {
         return this->_headers;
     }
 
-    fetch::header::map response::headers() {
+    header::map response::headers() {
         return this->_headers;
     }
 
-    int header::value::int_value() {
+    int header::int_value() {
         if (!this->_parsed) {
             this->_int = parse_int(this->str());
             this->_parsed = true;
@@ -176,7 +180,7 @@ namespace fetch {
         return this->_json;
     }
 
-    std::vector<std::string> header::value::list() const {
+    std::vector<std::string> header::list() const {
         return this->_list;
     }
 
@@ -196,7 +200,7 @@ namespace fetch {
         return this->_status_text;
     }
 
-    std::string header::value::str() const {
+    std::string header::str() const {
         return this->_str;
     }
 
@@ -206,6 +210,14 @@ namespace fetch {
 
     std::string response::text() const {
         return this->_text;
+    }
+
+    trailer::map fetch::error::trailers() {
+        return this->_trailers;
+    }
+
+    trailer::map response::trailers() {
+        return this->_trailers;
     }
 
     const char* error::what() const throw() {
@@ -218,7 +230,7 @@ namespace fetch {
 
     // Non-Member Functions
 
-    response request(fetch::header::map& headers, const std::string url, const std::string method, const std::string body) {
+    response request(header::map& headers, const std::string url, const std::string method, const std::string body) {
         // Begin - Map start line
         // Map method
         std::stringstream ss(method + " ");
@@ -271,7 +283,7 @@ namespace fetch {
                     return value;
                 }
 
-            return header::value();
+            return header();
         };
 
         // Map host
@@ -368,7 +380,7 @@ namespace fetch {
         std::vector<std::string> tokens = ::tokens(str);
 
         // Begin - Parse status and status text
-        size_t      status = stoi(tokens[1]);
+        size_t      status = parse_int(tokens[1]);
         std::string status_text = tokens[2];
 
         // Merge status_text
@@ -380,9 +392,7 @@ namespace fetch {
         header::map response_headers;
 
         while (getline(ss, str)) {
-            std::vector<std::string> header;
-
-            split(header, str, ":");
+            std::vector<std::string> header = split(str, ":");
             
             // Empty line
             if (header.size() == 1)
@@ -393,25 +403,56 @@ namespace fetch {
         }
 
         // Parse response body
-        std::string        text;
         std::ostringstream oss;
 
-        while (getline(ss, text))
-            oss << trim_end(text) << "\r\n";
+        while (getline(ss, str))
+            oss << trim_end(str) << "\r\n";
 
-        int _content_length = response_headers["content-length"];
+        int          content_length = response_headers["content-length"];
+        std::string  text;
+        trailer::map trailers;
 
-        text = oss.str().substr(0, _content_length == INT_MIN ?
-                response_headers["transfer-encoding"] == "chunked" ?
-                oss.str().length() :
-                0 :
-                std::min(_content_length, (int)oss.str().length()));
+        if (content_length == INT_MIN) {
+            if (response_headers["transfer-encoding"] == "chunked") {
+                // Map response body
+                ss.str(oss.str());
+                ss.clear();
+
+                std::vector<std::string> chunks;
+
+                while (getline(ss, str)) {
+                    int size = decimal(split(trim_end(str), ";")[0]);
+
+                    if (size <= 0)
+                        break;
+
+                    getline(ss, str);
+
+                    str = trim_end(str);
+                    
+                    chunks.push_back(str.substr(0, std::min(size, (int)str.length())));
+                }
+
+                text = join(chunks, "\r\n");
+
+                // Map trailers
+                while (getline(ss, str)) {
+                    std::vector<std::string> trailer = split(str, ":");
+                    
+                    if (trailer.size() == 1)
+                        break;
+
+                    trailers[tolowers(trailer[0])] = trim(trailer[1]);
+                }   
+            }
+        } else
+            text = oss.str().substr(0, std::min(content_length, (int)oss.str().length()));
 
         // Send response
         if (status < 200 || status >= 400)
-            throw fetch::error(status, status_text, text, response_headers);
+            throw fetch::error(status, status_text, text, response_headers, trailers);
 
-        return fetch::response(status, status_text, response_headers, text);
+        return response(status, status_text, response_headers, text, trailers);
     }
 
     size_t& timeout() {

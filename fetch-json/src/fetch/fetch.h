@@ -15,76 +15,80 @@
 namespace fetch {
     // Typedef
 
-    namespace header {
-        // Typdef
+    struct header {
+        // Constructors
 
-        struct value {
-            // Constructors
+        header();
 
-            value();
+        header(const char* value);
 
-            value(const char* value);
+        header(const int value);
 
-            value(const int value);
+        header(const std::string value);
 
-            value(const std::string value);
+        header(const std::vector<std::string> value);
 
-            value(const std::vector<std::string> value);
+        // Operators
 
-            // Operators
+        operator                 int();
 
-            operator                 int();
+        operator                 std::string();
 
-            operator                 std::string();
+        operator                 std::vector<std::string>();
 
-            operator                 std::vector<std::string>();
+        int                      operator=(const int value);
 
-            int                      operator=(const int value);
+        std::string              operator=(const std::string value);
 
-            std::string              operator=(const std::string value);
+        std::vector<std::string> operator=(const std::vector<std::string> value);
 
-            std::vector<std::string> operator=(const std::vector<std::string> value);
+        bool                     operator==(const char* value);
 
-            bool                     operator==(const char* value);
+        bool                     operator==(const int value);
 
-            bool                     operator==(const int value);
+        bool                     operator==(const std::string value);
 
-            bool                     operator==(const std::string value);
+        bool                     operator==(const header value);
 
-            bool                     operator==(const struct value value);
+        bool                     operator!=(const char* value);
 
-            bool                     operator!=(const char* value);
+        bool                     operator!=(const int value);
 
-            bool                     operator!=(const int value);
+        bool                     operator!=(const std::string value);
 
-            bool                     operator!=(const std::string value);
+        bool                     operator!=(const header value);
 
-            bool                     operator!=(const struct value value);
+        // Member Functions
+        int                      int_value();
 
-            // Member Functions
-            int                      int_value();
+        std::vector<std::string> list() const;
 
-            std::vector<std::string> list() const;
+        std::string              str() const;
 
-            std::string              str() const;
-        private:
-            // Member Fields
+        // Typedef
 
-            int                      _int;
-            std::vector<std::string> _list;
-            bool                     _parsed = false;
-            std::string              _str;
+        using map = std::map<std::string, header>;
+    private:
+        // Member Fields
 
-            // Member Functions
+        int                      _int;
+        std::vector<std::string> _list;
+        bool                     _parsed = false;
+        std::string              _str;
 
-            int                      _set(const int value);
-            
-            std::string              _set(const std::string value);
+        // Member Functions
 
-            std::vector<std::string> _set(const std::vector<std::string> value);
-        };
+        int                      _set(const int value);
+        
+        std::string              _set(const std::string value);
 
-        using map = std::map<std::string, header::value>;
+        std::vector<std::string> _set(const std::vector<std::string> value);
+    };
+
+    struct trailer: public header {
+        // Typedef
+
+        using map = header::map;
     };
 
     struct response_t {
@@ -93,51 +97,68 @@ namespace fetch {
         /**
          * Return response header
          */
-        virtual header::value get(const std::string key) = 0;
+        virtual header       get(const std::string key) = 0;
 
-        virtual header::map   headers() = 0;
+        virtual header::map  headers() = 0;
 
-        virtual size_t        status() const = 0;
+        virtual size_t       status() const = 0;
 
-        virtual std::string   status_text() const = 0;
+        virtual std::string  status_text() const = 0;
 
-        virtual std::string   text() const = 0;
+        virtual std::string  text() const = 0;
+
+        virtual trailer::map trailers() = 0;
     };
 
     struct error: public std::exception, public response_t {
         // Constructors
 
-        error(const size_t status, const std::string status_text, const std::string text = "", header::map headers = {});
+        error(
+            const size_t      status,
+            const std::string status_text,
+            const std::string text = "",
+            header::map       headers = {},
+            trailer::map      trailers = {}
+        );
 
         // Member Functions
 
         /**
          * Return response header
          */
-        header::value get(const std::string key);
+        header       get(const std::string key);
 
-        header::map   headers();
+        header::map  headers();
 
-        size_t        status() const;
+        size_t       status() const;
 
-        std::string   status_text() const;
+        std::string  status_text() const;
 
-        std::string   text() const;
+        std::string  text() const;
 
-        const char*   what() const throw();
+        trailer::map trailers();
+
+        const char*  what() const throw();
     private:
         // Member Fields
 
-        header::map _headers;
-        size_t      _status;
-        std::string _status_text;
-        std::string _text;
+        header::map  _headers;
+        size_t       _status;
+        std::string  _status_text;
+        std::string  _text;
+        trailer::map _trailers;
     };
 
     struct response: public response_t {
         // Constructors
 
-        response(const size_t status, const std::string status_text, header::map headers, const std::string text);
+        response(
+            const size_t      status,
+            const std::string status_text,
+            header::map       headers,
+            const std::string text,
+            trailer::map      trailers
+        );
 
         ~response();
 
@@ -146,7 +167,7 @@ namespace fetch {
         /**
          * Return response header
          */
-        header::value get(const std::string key);
+        header        get(const std::string key);
 
         header::map   headers();
 
@@ -157,6 +178,8 @@ namespace fetch {
         std::string   status_text() const;
 
         std::string   text() const;
+
+        trailer::map  trailers();
     private:
         // Member Fields
         
@@ -165,6 +188,7 @@ namespace fetch {
         size_t        _status;
         std::string   _status_text;
         std::string   _text;
+        trailer::map  _trailers;
     };
 
     // Non-Member Functions
