@@ -13,7 +13,6 @@
 #define LEVEL_ERROR 2
 #define LOGGING LEVEL_OFF
 
-#include <cassert>
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -72,9 +71,13 @@ double                   parse_number(const std::string value);
  */
 int                      pow2(const int b);
 
+std::vector<std::string> split(const std::string string, const std::string delimeter);
+
 void                     split(std::vector<std::string>& target, const std::string source, const std::string delimeter);
 
 bool                     starts_with(const std::string text, const std::string pattern);
+
+std::vector<std::string> tokens(const std::string string);
 
 void                     tokens(std::vector<std::string>& target, const std::string source);
 
