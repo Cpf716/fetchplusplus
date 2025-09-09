@@ -75,7 +75,7 @@ namespace json {
     }
 
     object::~object() {
-        for (object* value: this->values())
+        for (object* value: this->_values)
             delete value;
     }
 
@@ -395,11 +395,11 @@ namespace json {
     }
 
     array::iterator array::begin() {
-        return array::iterator(this->size(), this->values());
+        return array::iterator(this->size(), this->_values);
     }
 
     json::array* array::concat(std::vector<object*> values) {
-        json::array* result = new json::array(this->values());
+        json::array* result = new json::array(this->_values);
 
         for (object* value: values)
             for (size_t i = 0; i < value->size(); i++)
@@ -503,7 +503,7 @@ namespace json {
     }
 
     bool object::null() {
-        return this->value() == json::null() && !this->values().size();
+        return this->value() == json::null() && !this->_values.size();
     }
 
     void object::nullify() {
@@ -511,7 +511,7 @@ namespace json {
 
         this->_key_map.clear();
         
-        for (object* value: this->values())
+        for (object* value: this->_values)
             delete value;
 
         this->_values.clear();
@@ -709,10 +709,6 @@ namespace json {
         return this->_value;
     }
 
-    std::vector<object*> object::values() {
-        return this->_values;
-    }
-
     const char* error::what() const throw() {
         return this->_what.c_str();
     }
@@ -755,13 +751,13 @@ namespace json {
         
         ss << delimiters[0];
      
-        if (value->values().size()) {
+        if (value->_values.size()) {
             size_t i;
             
-            for (i = 0; i < value->values().size() - 1; i++)
-                ss << _stringify(value->values()[i]) << ",";
+            for (i = 0; i < value->_values.size() - 1; i++)
+                ss << _stringify(value->_values[i]) << ",";
             
-            ss << _stringify(value->values()[i]);
+            ss << _stringify(value->_values[i]);
         } else
             ss << value->value();
         
@@ -778,7 +774,7 @@ namespace json {
         if (target->type() == object::array_t) {
             if (source->type() == object::array_t) {
                 for (size_t i = 0; i < source->size(); i++)
-                    ((json::array *)target)->set(i, source->values()[i]);
+                    ((json::array *)target)->set(i, source->_values[i]);
                 // source is an object; do nothing
             }
             // target is an object
@@ -863,13 +859,13 @@ namespace json {
         
         ss << delimiters[0];
      
-        if (value->values().size()) {
+        if (value->_values.size()) {
             size_t i;
             
-            for (i = 0; i < value->values().size() - 1; i++)
-                ss << _stringify(value->values()[i]) << ",";
+            for (i = 0; i < value->_values.size() - 1; i++)
+                ss << _stringify(value->_values[i]) << ",";
             
-            ss << _stringify(value->values()[i]);
+            ss << _stringify(value->_values[i]);
         } else
             ss << value->value();
         
@@ -909,6 +905,6 @@ namespace json {
             return result;
         }
 
-        return value->values();
+        return value->_values;
     }
 }
