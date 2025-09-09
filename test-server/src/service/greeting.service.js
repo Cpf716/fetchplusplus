@@ -35,7 +35,7 @@ class GreetingService {
         tomorrow.setSeconds(0);
 
         // Increment day at midnight
-        setTimeout(() => this.incrementDay(), tomorrow.getMilliseconds() - today.getMilliseconds());
+        setTimeout(() => this.incrementDay(), tomorrow.getTime() - today.getTime());
     }
 
     // Member Functions

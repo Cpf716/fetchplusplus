@@ -62,19 +62,18 @@ namespace fetch {
             bool                     operator!=(const struct value value);
 
             // Member Functions
+            int                      int_value();
 
-            std::string get() const;
+            std::vector<std::string> list() const;
 
-            void        get(int& value);
-
-            void        get(std::vector<std::string>& value);
+            std::string              str() const;
         private:
             // Member Fields
 
             int                      _int;
+            std::vector<std::string> _list;
             bool                     _parsed = false;
             std::string              _str;
-            std::vector<std::string> _arr;
 
             // Member Functions
 
