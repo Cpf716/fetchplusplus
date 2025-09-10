@@ -336,9 +336,11 @@ namespace fetch {
 
             client->send(ss.str());
 
+            size_t timeout = fetch::timeout();
+
             // Begin - Listen for timeout
-            std::thread([&recved, &client]() {
-                for (size_t i = 0; i < timeout() && !recved.load(); i++)
+            std::thread([timeout, &recved, &client]() {
+                for (size_t i = 0; i < timeout && !recved.load(); i++)
                     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
                 if (recved.load())
