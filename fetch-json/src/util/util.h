@@ -8,11 +8,7 @@
 #ifndef util_h
 #define util_h
 
-#define LEVEL_OFF 0
-#define LEVEL_INFO 1
-#define LEVEL_ERROR 2
-#define LOGGING LEVEL_OFF
-
+#include "properties.h"
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -85,7 +81,7 @@ std::vector<std::string> tokens(const std::string string);
 
 void                     tokens(std::vector<std::string>& target, const std::string source);
 
-std::string              tolowers(const std::string string);
+std::string              tolowerstr(const std::string string);
 
 /**
  * Return string trimmed of leading and trailing whitespace

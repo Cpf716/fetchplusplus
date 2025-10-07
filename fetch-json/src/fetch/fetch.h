@@ -8,14 +8,22 @@
 #ifndef fetch_h
 #define fetch_h
 
+#include "dns.h"
 #include "json.h"
 #include "socket.h"
 #include <fstream>
+
+using namespace dns;
+using namespace mysocket;
 
 namespace fetch {
     // Typedef
 
     struct header {
+        // Typedef
+
+        using map = std::map<std::string, header>;
+
         // Constructors
 
         header();
@@ -59,27 +67,23 @@ namespace fetch {
         bool                     operator!=(const header value);
 
         // Member Functions
-        int                      int_value();
+
+        int                      int_value() const;
 
         std::vector<std::string> list() const;
 
         std::string              str() const;
-
-        // Typedef
-
-        using map = std::map<std::string, header>;
     private:
         // Member Fields
 
         int                      _int;
         std::vector<std::string> _list;
-        bool                     _parsed = false;
         std::string              _str;
 
         // Member Functions
 
         int                      _set(const int value);
-        
+
         std::string              _set(const std::string value);
 
         std::vector<std::string> _set(const std::vector<std::string> value);
@@ -97,35 +101,6 @@ namespace fetch {
         /**
          * Return response header
          */
-        virtual header       get(const std::string key) = 0;
-
-        virtual header::map  headers() = 0;
-
-        virtual size_t       status() const = 0;
-
-        virtual std::string  status_text() const = 0;
-
-        virtual std::string  text() const = 0;
-
-        virtual trailer::map trailers() = 0;
-    };
-
-    struct error: public std::exception, public response_t {
-        // Constructors
-
-        error(
-            const size_t      status,
-            const std::string status_text,
-            const std::string text = "",
-            header::map       headers = {},
-            trailer::map      trailers = {}
-        );
-
-        // Member Functions
-
-        /**
-         * Return response header
-         */
         header       get(const std::string key);
 
         header::map  headers();
@@ -137,63 +112,88 @@ namespace fetch {
         std::string  text() const;
 
         trailer::map trailers();
-
-        const char*  what() const throw();
-    private:
-        // Member Fields
-
-        header::map  _headers;
-        size_t       _status;
-        std::string  _status_text;
-        std::string  _text;
-        trailer::map _trailers;
-    };
-
-    struct response: public response_t {
-        // Constructors
-
-        response(
-            const size_t      status,
-            const std::string status_text,
-            header::map       headers,
-            const std::string text,
-            trailer::map      trailers
-        );
-
-        ~response();
-
-        // Member Functions
-
-        /**
-         * Return response header
-         */
-        header        get(const std::string key);
-
-        header::map   headers();
-
-        json::object* json();
-
-        size_t        status() const;
-
-        std::string   status_text() const;
-
-        std::string   text() const;
-
-        trailer::map  trailers();
-    private:
+    protected:
         // Member Fields
         
-        header::map   _headers;
-        json::object* _json = NULL;
+        header::map   _headers;        
         size_t        _status;
         std::string   _status_text;
         std::string   _text;
         trailer::map  _trailers;
     };
 
+    class response: public response_t {
+        // Member Fields
+
+        json::object* _json = NULL;
+
+        // Constructors
+
+        response(const std::string data);
+
+        // Non-Member Functions
+
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+    public:
+        // Constructors
+
+        response();
+
+        response(const size_t status, const std::string status_text, const std::string text);
+
+        response(const size_t status, const std::string status_text, header::map headers = {}, const std::string text = "", trailer::map trailers = {});
+
+        ~response();
+
+        // Member Functions
+
+        json::object* json();
+    };
+
+    class request {
+        // Constructors
+
+        request(header::map& headers, const std::string url, const std::string method, const std::string body);
+
+        // Member Fields
+
+        std::string _message;
+        url         _url;
+
+        // Non-Member Functions
+
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+
+public:
+        // Member Functions
+
+        std::string message() const;
+
+        url         url();
+    };
+
+    struct error: public std::exception, public response_t {
+        // Constructors
+
+        error(const size_t status, const std::string status_text, const std::string text = "", header::map headers = {}, trailer::map trailers = {});
+
+        // Member Functions
+
+        const char* what() const throw();
+    private:
+
+        // Non-Member Functions
+
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+    };
+
     // Non-Member Functions
+
+    size_t&  max_redirects();
     
     response request(header::map& headers, const std::string url, const std::string method = "GET", const std::string body = "");
+
+    response parse_response(const std::string data);
 
     /**
      * Returns request timeout

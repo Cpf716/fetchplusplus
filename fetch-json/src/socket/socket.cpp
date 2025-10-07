@@ -34,17 +34,14 @@ namespace mysocket {
 
     // Constructors
 
-    tcp_server::connection::connection(const int file_descriptor) {
+    tcp_server::connection::connection(tcp_server* parent, const int file_descriptor) {
+        this->_parent = parent;
         this->_file_descriptor = file_descriptor;
     }
 
     error::error(const int errnum) {
         this->_errnum = errnum;
         this->_what = std::strerror(this->_errnum);
-    }
-
-    error::error(const std::string what) {
-        this->_what = what;
     }
 
     tcp_client::tcp_client(const std::string host, const int port) {
@@ -61,7 +58,7 @@ namespace mysocket {
         // Convert port to network byte order
         addr.sin_port = htons(port);
         
-        if (inet_pton(AF_INET, (host == "localhost" ? "127.0.0.1" : host).c_str(), &addr.sin_addr) == -1)
+        if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) == -1)
             throw mysocket::error(errno);
         
         // Returns 0 for success, -1 otherwise
@@ -110,7 +107,7 @@ namespace mysocket {
         
         this->_listener = std::thread([&]{
             while (true) {
-                if (this->_shutdown.load())
+                if (this->_shut_down.load())
                     return;
                 
                 // Returns nonnegative file descriptor or -1 for error
@@ -121,7 +118,7 @@ namespace mysocket {
                 if (file_descriptor == -1)
                     continue;
 
-                struct connection* connection = new struct connection(file_descriptor);
+                class connection* connection = new class connection(this, file_descriptor);
                 
                 this->_mutex.lock();
                 this->_connections.push_back(connection);
@@ -156,7 +153,7 @@ namespace mysocket {
         // Convert port to network byte order
         this->_address->sin_port = htons(port);
         
-        if (inet_pton(AF_INET, (host == "localhost" ? "127.0.0.1" : host).c_str(), &this->_address->sin_addr) == -1) {
+        if (inet_pton(AF_INET, host.c_str(), &this->_address->sin_addr) == -1) {
             ::close(this->_file_descriptor);
             
             throw mysocket::error(errno);
@@ -210,15 +207,15 @@ namespace mysocket {
     void tcp_server::connection::_close() {
         if (::close(this->_file_descriptor))
             throw mysocket::error(errno);
-        
+
         delete this;
     }
 
-    int tcp_server::_find_connection(const struct connection* connection) {
+    int tcp_server::_find_connection(const class connection* connection) {
         return this->_find_connection(connection, 0, this->_connections.size());
     }
 
-    int tcp_server::_find_connection(const struct connection* connection, const size_t start, const size_t end) {
+    int tcp_server::_find_connection(const class connection* connection, const size_t start, const size_t end) {
         if (start == end)
             return -1;
         
@@ -233,6 +230,10 @@ namespace mysocket {
         return this->_find_connection(connection, start + len + 1, end);
     }
 
+    void tcp_server::connection::close() {
+        this->_parent->close(this);
+    }
+
     void tcp_client::close() {
         if (::close(this->_file_descriptor)) 
             throw mysocket::error(errno);
@@ -241,7 +242,7 @@ namespace mysocket {
     }
 
     void tcp_server::close() {
-        this->_shutdown.store(true);
+        this->_shut_down.store(true);
         
         if (::close(this->_file_descriptor))
             throw mysocket::error(errno);
@@ -266,15 +267,14 @@ namespace mysocket {
         delete this;
     }
 
-    void tcp_server::close(struct connection* connection) {
+    void tcp_server::close(class connection* connection) {
         this->_mutex.lock();
         
         int index = this->_find_connection(connection);
 
         if (index == -1) {
             this->_mutex.unlock();
-
-            throw mysocket::error("Unknown error");
+            return;
         }
 
         try {
@@ -293,7 +293,7 @@ namespace mysocket {
         this->_mutex.lock();
 
         std::vector<connection*> temp = this->_connections;
-        
+
         this->_mutex.unlock();
 
         return temp;
@@ -314,17 +314,10 @@ namespace mysocket {
     std::string udp_socket::recvfrom() const {
         char      buff[1024];
         socklen_t addrlen = sizeof(* this->_address);
-        ssize_t   len = ::recvfrom(
-            this->_file_descriptor,
-            (char *)buff,
-            1024,
-            MSG_WAITALL,
-            (struct sockaddr *)this->_address,
-            &addrlen
-        );
+        ssize_t   len = ::recvfrom(this->_file_descriptor, (char *)buff, 1024, MSG_WAITALL, (struct sockaddr *)this->_address, &addrlen);
         
         if (len == -1)
-            throw mysocket::error("Unknown error");
+            throw mysocket::error(errno);
         
         buff[len] = '\0';
         
@@ -340,17 +333,10 @@ namespace mysocket {
     }
 
     int udp_socket::sendto(const std::string message) const {
-        ssize_t len = ::sendto(
-            this->_file_descriptor,
-            (const char *)message.c_str(),
-            message.length(),
-            0,
-            (const struct sockaddr *)this->_address,
-            sizeof(* this->_address)
-        );
+        ssize_t len = ::sendto(this->_file_descriptor, (const char *)message.c_str(), message.length(), 0, (const struct sockaddr *)this->_address, sizeof(* this->_address));
         
         if (len == -1)
-            throw mysocket::error("Unknown error");
+            throw mysocket::error(errno);
         
         return (int)len;
     }

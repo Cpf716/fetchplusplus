@@ -11,7 +11,11 @@ const { LoggerService } = require('./logger.service');
 class RequestService {
     // Non-Member Functions
     
-    static receive = (url, body) => LoggerService.info({ url, body });
+    static receive = (url, body) => LoggerService.info({
+        date: new Date().toISOString().split('T').join(' '),
+        url,
+        body
+    });
 }
 
 module.exports = { RequestService };

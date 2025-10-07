@@ -59,6 +59,7 @@
         "charconv": "cpp",
         "csignal": "cpp",
         "cassert": "cpp",
-        "iterator": "cpp"
+        "iterator": "cpp",
+        "span": "cpp"
     }
 }
