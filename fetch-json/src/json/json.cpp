@@ -373,7 +373,7 @@ namespace json {
         std::pair<std::string, size_t> key_map = this->_key_map[index];
 
         delete this->_values[this->size() + key_map.second];
-        
+
         this->_values.erase(this->_values.begin() + this->size() + key_map.second);
         this->_key_map.erase(this->_key_map.begin() + index);
 
@@ -756,7 +756,7 @@ namespace json {
             
             for (i = 0; i < value->_values.size() - 1; i++)
                 ss << _stringify(value->_values[i]) << ",";
-            
+
             ss << _stringify(value->_values[i]);
         } else
             ss << value->value();
@@ -861,10 +861,10 @@ namespace json {
      
         if (value->_values.size()) {
             size_t i;
-            
+
             for (i = 0; i < value->_values.size() - 1; i++)
                 ss << _stringify(value->_values[i]) << ",";
-            
+
             ss << _stringify(value->_values[i]);
         } else
             ss << value->value();

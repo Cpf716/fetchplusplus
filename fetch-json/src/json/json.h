@@ -14,7 +14,7 @@
 
 namespace json {
     // Typedef
-
+    
     struct error: public std::exception {
         // Constructors
 
@@ -186,15 +186,15 @@ namespace json {
 
             bool      operator!=(const iterator& value) const;
         private:
-            // Constructors
-
-            iterator(const size_t size, std::vector<object*> values);
-
             // Member Fields
 
             int                  _index = 0;
             size_t               _size;
             std::vector<object*> _values;
+
+            // Constructors
+
+            iterator(const size_t size, std::vector<object*> values);
         };
 
         // Constructors
