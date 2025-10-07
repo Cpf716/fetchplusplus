@@ -1,6 +1,6 @@
 # Fetch-JSON SDK
 
-Thank you for checking out the <i>Fetch-JSON SDK</i>!
+Thanks for checking out my <i>fetch-json</i> SDK for C++!
 
 It combines two powerful SDKs <i>fetch</i> and <i>json</i>, equipping C++ developers with a native HTTP client for REST APIs.
 
