@@ -884,7 +884,7 @@ namespace json {
                 if (value->value() == "null")
                     return "unknown";
 
-                std::string lower_value = tolowers(value->value());
+                std::string lower_value = tolowerstr(value->value());
 
                 if (lower_value == "true" || lower_value == "false")
                     return "boolean";

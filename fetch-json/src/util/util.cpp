@@ -464,7 +464,7 @@ void tokens(std::vector<std::string>& target, const std::string source) {
     }
 }
 
-std::string tolowers(const std::string string) {
+std::string tolowerstr(const std::string string) {
     std::string str = string;
 
     std::transform(str.begin(), str.end(), str.begin(), ::tolower);

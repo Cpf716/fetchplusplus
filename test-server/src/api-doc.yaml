@@ -20,12 +20,19 @@ paths:
           application/json:
             schema:
               type: object
-              required:
-                - firstName
+              anyOf:
+                - required:
+                    - firstName
+                - required:
+                    - fullName
+                - required:
+                    - lastName
               properties:
                 firstName:
                   type: string
                 lastName:
+                  type: string
+                fullName:
                   type: string
       responses:
         "200":
@@ -61,7 +68,7 @@ paths:
       responses:
         "200":
           description: Successful request
-
+          
   "/ping":
     get:
       operationId: ping

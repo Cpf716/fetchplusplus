@@ -46,9 +46,19 @@ class GreetingService {
      * @returns string
      */
     create(options) {
-        const greeting = ["Happy ", DAYS[this.day], ", ", options.firstName];
+        const greeting = ["Happy ", DAYS[this.day], ", "];
 
-        options.lastName && greeting.push(" ", options.lastName);
+        if (options.fullName)
+            greeting.push(options.fullName);
+        else {
+            greeting.push(options.firstName ?? "");
+
+            if (options.lastName) {
+                options.firstName && greeting.push(" ");
+
+                greeting.push(options.lastName);
+            }
+        }
 
         greeting.push("!");
 

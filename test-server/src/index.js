@@ -47,14 +47,14 @@ const main = () => {
                 status: 400
             }, req, res);
         },
+        doNotReply: (c, req, res) => {},
         greeting: (c, req, res) => {
             Request.receive(req.url, req.body);
 
-            res.setHeader("content-type", "text/plain").send(greeting.create(req.body));   
+            res.send(greeting.create(req.body));   
         },
-        doNotReply: (c, req, res) => {},
         ping: (c, req, res) => res.send({ message: "Hello, world!"}),
-        notFound: (c, req, res) => res.status(404).json(`Cannot ${req.method} ${req.url}`)
+        notFound: (c, req, res) => res.status(404).send(`Cannot ${req.method} ${req.url}`)
     })
 
     const app = express();
@@ -65,7 +65,12 @@ const main = () => {
     app.use(express.json());
     app.use((req, res) => api.handleRequest(req, req, res));
 
-    app.listen(PORT, () => console.log(`Server listening on port ${PORT}...`));
+    const proxy = express();
+
+    proxy.use((req, res) => res.redirect(308, `http://localhost:${PORT + 1}${req.url}`));
+    proxy.listen(PORT, () => console.log(`Server listening on port ${PORT}...`));
+
+    app.listen(PORT + 1);
 };
 
 // Entry point

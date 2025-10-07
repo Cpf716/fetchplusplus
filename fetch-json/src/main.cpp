@@ -15,7 +15,6 @@ using namespace std;
 int main(int argc, const char * argv[]) {
     header::map headers = {
         { "content-type", "application/json" },
-        { "accept", (vector<string>){ "application/json", "text/plain" }}
     };
     
     string      url = "http://localhost:8081/greeting";
@@ -25,6 +24,8 @@ int main(int argc, const char * argv[]) {
     auto        body = new object((vector<object*>) {
         new object("firstName", encode("Corey")),
         // new object("lastName", encode("Ferguson"))
+        
+        new object("fullName", encode("Corey Ferguson"))
     });
 
     try {
