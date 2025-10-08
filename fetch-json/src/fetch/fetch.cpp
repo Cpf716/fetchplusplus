@@ -216,7 +216,7 @@ namespace fetch {
     std::string header::_set(const std::string value) {
         this->_str = value;
         this->_int = parse_int(this->str());
-        this->_list = split(this->str(), ", ");
+        this->_list = split(this->str(), ",");
 
         for (size_t i = 0; i < this->_list.size(); i++)
             this->_list[i] = trim(this->_list[i]);
@@ -226,7 +226,7 @@ namespace fetch {
 
     std::vector<std::string> header::_set(const std::vector<std::string> value) {
         this->_list = value;
-        this->_str = join(this->list(), ", ");
+        this->_str = join(this->list(), ",");
         this->_int = INT_MIN;
 
         return this->list();
@@ -352,7 +352,7 @@ namespace fetch {
 
 // Info
 #if LOGGING
-                            std::cout << "Redirecting to " << location << std::endl;
+                                std::cout << "Redirecting to " << location << std::endl;
 #endif
 
                                 return _request(headers, location, method, body, redirects + 1);
@@ -422,11 +422,11 @@ namespace fetch {
         while (getline(iss, str))
             oss << trim_end(str) << "\r\n";
 
-        int          content_length = headers["content-length"];
+        int          cl = headers["content-length"];
         std::string  text;
         trailer::map trailers;
 
-        if (content_length == INT_MIN) {
+        if (cl == INT_MIN) {
             if (headers["transfer-encoding"] == "chunked") {
                 // Parse response body
                 iss.str(oss.str());
@@ -460,7 +460,7 @@ namespace fetch {
                 }   
             }
         } else
-            text = oss.str().substr(0, std::min(content_length, (int)oss.str().length()));
+            text = oss.str().substr(0, std::min(cl, (int)oss.str().length()));
 
         if (status < 200 || status >= 400)
             throw fetch::error(status, status_text, text, headers, trailers);
