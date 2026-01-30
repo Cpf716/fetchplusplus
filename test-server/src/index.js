@@ -14,7 +14,7 @@ const { GreetingService } = require('./service/greeting.service'),
 
 // Non-Member Fields
 
-const PORT = 8081;
+const PORT = 8080;
 
 // Non-Member Functions
 
@@ -47,7 +47,6 @@ const main = () => {
                 status: 400
             }, req, res);
         },
-        doNotReply: (c, req, res) => {},
         greeting: (c, req, res) => {
             Request.receive(req.url, req.body);
 
@@ -64,13 +63,7 @@ const main = () => {
     }));
     app.use(express.json());
     app.use((req, res) => api.handleRequest(req, req, res));
-
-    const proxy = express();
-
-    proxy.use((req, res) => res.redirect(308, `http://localhost:${PORT + 1}${req.url}`));
-    proxy.listen(PORT, () => console.log(`Server listening on port ${PORT}...`));
-
-    app.listen(PORT + 1);
+    app.listen(PORT, () => console.log(`Server listening on port ${PORT}...`));
 };
 
 // Entry point

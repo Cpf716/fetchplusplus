@@ -16,20 +16,14 @@ int main(int argc, const char * argv[]) {
     header::map headers = {
         { "content-type", "application/json" },
     };
-    
-    string      url = "http://localhost:8081/greeting";
-    // string      url = "http://localhost:8081/no-reply";
-
-    string      method = "POST";
     auto        body = new object((vector<object*>) {
         new object("firstName", encode("Corey")),
-        // new object("lastName", encode("Ferguson"))
-        
-        new object("fullName", encode("Corey Ferguson"))
     });
 
     try {
-        auto response = request(headers, url, method, stringify(body));
+        auto response = request(headers, "http://localhost:8080/api/greeting", "POST", stringify(body));
+
+        delete body;
         
         try {
             cout << stringify(response.json()) << endl;
@@ -37,6 +31,8 @@ int main(int argc, const char * argv[]) {
             cout << response.text() << endl;
         }
     } catch (fetch::error& e) {
+        delete body;
+
         if (e.text().length())
             throw fetch::error(e.status(), e.text(), e.text(), e.headers());
         
