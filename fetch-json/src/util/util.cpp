@@ -273,16 +273,7 @@ bool is_pow(const size_t b, const size_t n) {
 }
 
 bool is_string(const std::string value) {
-    return !is_number(value);
-}
-
-bool is_string_literal(const std::string value) {
-    size_t i = 0;
-
-    while (i < value.length() && value[i] != '\"')
-        i++;
-
-    return i != value.length();
+    return value.length() >= 2 && value[0] == '\"' && value[value.length() - 1] == '\"';
 }
 
 std::string join(std::vector<std::string> values, std::string delimeter) {

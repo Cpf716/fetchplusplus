@@ -39,15 +39,7 @@ bool                     is_number(const std::string value);
 
 bool                     is_pow(const size_t b, const size_t n);
 
-/**
- * Return true if value is not a number, otherwise return false
- */
 bool                     is_string(const std::string value);
-
-/**
- * Return true if value includes double quotations, otherwise return false
- */
-bool                     is_string_literal(const std::string value);
 
 std::string              join(std::vector<std::string> values, std::string delimeter);
 
