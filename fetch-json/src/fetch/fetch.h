@@ -10,14 +10,29 @@
 
 #include "dns.h"
 #include "json.h"
+#include "logger.h"
 #include "socket.h"
 #include <fstream>
 
 using namespace dns;
+using namespace json;
 using namespace mysocket;
 
 namespace fetch {
     // Typedef
+
+    enum status_code {
+        UNKNOWN_ERROR = 0,
+        OK = 200,
+        NO_CONTENT = 204,
+        FOUND = 302,
+        TEMPORARY_REDIRECT = 307,
+        PERMANENT_REDIRECT = 308,
+        BAD_REQUEST = 400,
+        UNAUTHORIZED = 401,
+        NOT_FOUND = 404,
+        INTERNAL_SERVER_ERROR = 500,
+    };
 
     struct header {
         // Typedef
@@ -105,7 +120,7 @@ namespace fetch {
 
         header::map  headers();
 
-        size_t       status() const;
+        status_code  status() const;
 
         std::string  status_text() const;
 
@@ -116,7 +131,7 @@ namespace fetch {
         // Member Fields
         
         header::map   _headers;        
-        size_t        _status;
+        status_code   _status;
         std::string   _status_text;
         std::string   _text;
         trailer::map  _trailers;
@@ -133,15 +148,15 @@ namespace fetch {
 
         // Non-Member Functions
 
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
     public:
         // Constructors
 
         response();
 
-        response(const size_t status, const std::string status_text, const std::string text);
+        response(const status_code status, const std::string status_text, const std::string text);
 
-        response(const size_t status, const std::string status_text, header::map headers = {}, const std::string text = "", trailer::map trailers = {});
+        response(const status_code status, const std::string status_text, header::map headers = {}, const std::string text = "", trailer::map trailers = {});
 
         ~response();
 
@@ -162,7 +177,7 @@ namespace fetch {
 
         // Non-Member Functions
 
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
 
 public:
         // Member Functions
@@ -175,7 +190,7 @@ public:
     struct error: public std::exception, public response_t {
         // Constructors
 
-        error(const size_t status, const std::string status_text, const std::string text = "", header::map headers = {}, trailer::map trailers = {});
+        error(const status_code status, const std::string status_text, const std::string text = "", header::map headers = {}, trailer::map trailers = {});
 
         // Member Functions
 
@@ -184,21 +199,26 @@ public:
 
         // Non-Member Functions
 
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects);
+        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
     };
 
     // Non-Member Functions
 
-    size_t&  max_redirects();
-    
-    response request(header::map& headers, const std::string url, const std::string method = "GET", const std::string body = "");
+    size_t               get_max_redirects();
 
-    response parse_response(const std::string data);
+    size_t               get_timeout();
 
-    /**
-     * Returns request timeout
-     */
-    size_t&  timeout();
+    std::string          http_version();
+
+    std::atomic<size_t>& max_redirects();
+
+    response             request(header::map& headers, const std::string url, const std::string method = "GET", const std::string body = "");
+
+    void                 set_max_redirects(const size_t value);
+
+    void                 set_timeout(const size_t value);
+
+    std::string          strstatus(const status_code status);
 }
 
 #endif /* fetch_h */
