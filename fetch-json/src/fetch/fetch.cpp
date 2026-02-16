@@ -239,12 +239,8 @@ namespace fetch {
     }
 
     json::object* response::json() {    
-        if (this->_json == NULL) {
-            if (!starts_with(this->_headers["content-type"], "application/json"))
-                throw json::error("undefined");
-
-            this->_json = json::parse(this->text());
-        }
+        if (this->_json == NULL)
+            this->_json = json::parse(starts_with(this->get("content-type"), "application/json") ? this->text() : "");
 
         return this->_json;
     }

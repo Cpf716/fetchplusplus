@@ -25,11 +25,7 @@ int main(int argc, const char * argv[]) {
 
         delete body;
         
-        try {
-            logger::info(stringify(response.json()));
-        } catch (json::error& e) {
-            logger::info(response.text());
-        }
+        logger::info(stringify(response.json()));
     } catch (fetch::error& e) {
         delete body;
 
