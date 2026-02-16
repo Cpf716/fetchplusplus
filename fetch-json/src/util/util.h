@@ -8,7 +8,7 @@
 #ifndef util_h
 #define util_h
 
-#include "properties.h"
+#include "logger.h"
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -73,7 +73,9 @@ std::vector<std::string> tokens(const std::string string);
 
 void                     tokens(std::vector<std::string>& target, const std::string source);
 
-std::string              tolowerstr(const std::string string);
+std::string              tolowerstr(std::string string);
+
+std::string              toupperstr(std::string string);
 
 /**
  * Return string trimmed of leading and trailing whitespace

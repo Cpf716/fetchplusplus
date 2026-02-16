@@ -26,9 +26,9 @@ int main(int argc, const char * argv[]) {
         delete body;
         
         try {
-            cout << stringify(response.json()) << endl;
+            logger::info(stringify(response.json()));
         } catch (json::error& e) {
-            cout << response.text() << endl;
+            logger::info(response.text());
         }
     } catch (fetch::error& e) {
         delete body;

@@ -8,16 +8,9 @@
 #include "fetch.h"
 
 namespace fetch {
-    // Non-Member Fields
-
-    const std::string HTTP_VERSION = "HTTP/1.1";
-
-    size_t _max_redirects = 20;
-    size_t _timeout = 30;
-
     // Constructors
 
-    error::error(const size_t status, const std::string status_text, const std::string text, header::map headers, trailer::map trailers) {
+    error::error(const status_code status, const std::string status_text, const std::string text, header::map headers, trailer::map trailers) {
         this->_status = status;
         this->_status_text = status_text;
         this->_text = text;
@@ -48,7 +41,7 @@ namespace fetch {
     request::request(header::map& headers, const std::string url, const std::string method, const std::string body) {
         // Begin - Map start line
         // Map method
-        std::stringstream ss(method + " ");
+        std::stringstream ss(toupperstr(method) + " ");
 
         // Set cursor to the end
         ss.seekp(0, std::ios::end);
@@ -62,53 +55,56 @@ namespace fetch {
             // End - Map target (path)
 
             // Map protocol
-            ss << HTTP_VERSION << "\r\n";
+            ss << http_version() << "\r\n";
             // End - Map start line
 
             // Begin - Map request headers
-            auto get = [&headers](std::string& key) {
-                for (const auto& [_key, value]: headers)
-                    if (tolowerstr(_key) == key) {
-                        key = _key;
-
-                        return value;
-                    }
-
-                return header();
-            };
+            // Map headers to lower
+            header::map tmp;
+            
+            for (const auto& [key, value]: headers)
+                tmp[tolowerstr(key)] = value;
+            
+            headers = tmp;
 
             // Map host
-            std::string key = "host",
-                        host = get(key);
-
-            // Generate host, if required
+            std::string host = headers["host"].str();
+            
             if (host.empty()) {
                 host = this->url().host();
 
                 if (this->url().port().typed())
-                    host += ":" + std::to_string(this->url().port().value());
+                    host += ":" + std::to_string((int) this->url().port());
             }
 
-            headers.erase(key);
+            headers.erase("host");
             
-            // Map host
             ss << "host: " << host << "\r\n";
 
             // Generate content-length, if required
-            key = "content-length";
-
-            if (get(key).str().empty()) {
-                headers.erase(key);
-
+            if (headers["content-length"].str().empty()) {
                 if (body.length())
-                    headers["content-length"] = (int)body.length();
-            }       
+                    headers["content-length"] = (int) body.length();
+                else
+                    headers.erase("content-length");
+            }
+            
+            headers["user-agent"] = std::string("cpp-fetch/1.0");
 
             // Map request headers
-            for (const auto& [key, value]: headers)
-                ss << key << ": " << value.str() << "\r\n";
+            for (const auto& [key, value]: headers) {
+                std::vector<std::string> tokens = split(key, "-");
+                
+                for (size_t i = 0; i < tokens.size(); i++)
+                    tokens[i] = std::string((char[]) { tokens[i][0], '\0' }) + tokens[i].substr(1);
 
-            headers["host"] = host;
+                for (size_t i = 0; i < tokens.size() - 1; i++)
+                    ss << tokens[i] << "-";
+
+                ss << tokens[tokens.size() - 1] << ": " << value.str() << "\r\n";
+            }
+
+            headers["Host"] = host;
             // End - Map request headers
 
             // Map body
@@ -121,19 +117,17 @@ namespace fetch {
 
             this->_message = ss.str();
 
-#if LOGGING == LEVEL_DEBUG
-            std::cout << this->message() << std::endl;
-#endif
+            logger::debug(this->message());
         } catch (url::error& e) {
-            throw fetch::error(0, "Unknown error");
+            throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR));
         }
     }
 
-    response::response() : response(200, "OK") { }
+    response::response() : response(OK, strstatus(OK)) { }
 
-    response::response(const size_t status, const std::string status_text, const std::string text) : response(status, status_text, {}, text) { }
+    response::response(const status_code status, const std::string status_text, const std::string text) : response(status, status_text, {}, text) { }
 
-    response::response(const size_t status, const std::string status_text, header::map headers, const std::string text, trailer::map trailers) {
+    response::response(const status_code status, const std::string status_text, header::map headers, const std::string text, trailer::map trailers) {
         this->_status = status;
         this->_status_text = status_text;
         this->_headers = headers;
@@ -263,7 +257,7 @@ namespace fetch {
         return this->_message;
     }
 
-    size_t response_t::status() const {
+    status_code response_t::status() const {
         return this->_status;
     }
 
@@ -291,99 +285,14 @@ namespace fetch {
         return this->_status_text.c_str();
     }
 
+    // Non-Member Fields
+
+    std::atomic<size_t> _max_redirects = 20;
+    std::atomic<size_t> _timeout = 30;
+
     // Non-Member Functions
 
-    response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects) {
-        class request request(headers, url, method, body);
-        class url     url_obj = request.url();
-
-        if (url_obj.protocol() == "https")
-            throw fetch::error(0, "Unknown error", "TLS is not supported");
-
-        try {
-            std::vector<class host> hosts = dns::lookup(url_obj);
-
-            try {
-                tcp_client* client = new tcp_client(hosts[0].ip(), url_obj.port().value());
-
-                try {
-                    client->send(request.message());
-
-                    size_t            timeout = fetch::timeout();
-                    std::atomic<bool> recved = false;
-
-                    // Begin - Listen for timeout
-                    std::thread([timeout, &recved, &client]() {
-                        for (size_t i = 0; i < timeout && !recved.load(); i++)
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-                        if (recved.load())
-                            return;
-
-                        recved.store(true);
-
-                        // Sever connection
-                        client->close();
-                    }).detach();
-                    // End - Listen for timeout
-
-                    try {
-                        std::string response = client->recv();
-
-#if LOGGING == LEVEL_DEBUG
-                        std::cout << response << std::endl;
-#endif
-
-                        recved.store(true);
-                        client->close();
-
-                        // Server disconnected
-                        if (response.empty())
-                            throw fetch::error(0, "Unknown error");
-
-                        class response response_obj = parse_response(response);
-
-                        if (response_obj.status() >= 300 && response_obj.status() < 400) {
-                            std::string location = response_obj.headers()["location"];
-
-                            if (location.length()) {
-                                if (redirects == max_redirects())
-                                    throw fetch::error(0, "Unknown error", "Maximum redirects");
-
-// Info
-#if LOGGING
-                                std::cout << "Redirecting to " << location << std::endl;
-#endif
-
-                                return _request(headers, location, method, body, redirects + 1);
-                            }
-                        }
-
-                        return response_obj;
-                    } catch (mysocket::error& e) {
-                        if (recved.load())
-                            throw fetch::error(0, "Unknown error", "Connection timed out");
-
-                        throw e;
-                    }                
-                } catch (mysocket::error& e) {
-                    client->close();
-
-                    throw e;
-                }
-            } catch (mysocket::error& e) {
-                throw fetch::error(0, "Unknown error", e.what());
-            }
-        } catch (dns::error& e) {
-            throw fetch::error(0, "Unknown error", e.what());
-        }
-    }
-
-    size_t& max_redirects() {
-        return _max_redirects;
-    }
-
-    response parse_response(const std::string data) {
+    response _parse_response(const std::string data) {
         // Begin - Parse response
         std::istringstream iss(data);
         std::string        str;
@@ -427,6 +336,8 @@ namespace fetch {
         trailer::map trailers;
 
         if (cl == INT_MIN) {
+            headers.erase("content-length");
+            
             if (headers["transfer-encoding"] == "chunked") {
                 // Parse response body
                 iss.str(oss.str());
@@ -444,7 +355,7 @@ namespace fetch {
 
                     str = trim_end(str);
 
-                    chunks.push_back(str.substr(0, std::min(size, (int)str.length())));
+                    chunks.push_back(str.substr(0, std::min(size, (int) str.length())));
                 }
 
                 text = join(chunks, "\r\n");
@@ -458,21 +369,149 @@ namespace fetch {
 
                     trailers[tolowerstr(trailer[0])] = trim(str.substr(trailer[0].length() + 1));
                 }   
-            }
+            } else if (headers["transfer-encoding"].str().empty())
+                headers.erase("transfer-encoding");
         } else
-            text = oss.str().substr(0, std::min(cl, (int)oss.str().length()));
+            text = oss.str().substr(0, std::min(cl, (int) oss.str().length()));
 
         if (status < 200 || status >= 400)
-            throw fetch::error(status, status_text, text, headers, trailers);
+            throw fetch::error(static_cast<status_code>(status), status_text, text, headers, trailers);
 
-        return response(status, status_text, headers, text, trailers);
+        return response(static_cast<status_code>(status), status_text, headers, text, trailers);
+    }
+
+    response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects) {
+        class request request(headers, url, method, body);
+        class url     url_obj = request.url();
+
+        if (url_obj.protocol() == "https")
+            throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR), "TLS is not supported");
+
+        try {
+            std::vector<class host> hosts = dns::lookup(url_obj);
+
+            try {
+                tcp_client*       client = new tcp_client(hosts[0].ip(), url_obj.port());
+                std::atomic<bool> recved = false;
+
+                try {
+                    client->send(request.message());
+
+                    // Begin - Listen for timeout
+                    std::thread([&recved, &client]() {
+                        size_t timeout = get_timeout();
+
+                        for (size_t i = 0; i < timeout && !recved.load(); i++)
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+                        if (recved.load())
+                            return;
+
+                        recved.store(true);
+
+                        // Sever connection
+                        client->close();
+                    }).detach();
+                    // End - Listen for timeout
+                    
+                    std::string response = client->recv();
+
+                    logger::debug(response);
+
+                    recved.store(true);
+                    client->close();
+
+                    // Server disconnected
+                    if (response.empty())
+                        throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR));
+
+                    class response response_obj = _parse_response(response);
+
+                    // Redirect
+                    if (response_obj.status() >= 300 && response_obj.status() < 400) {
+                        std::string location = response_obj.headers()["location"];
+
+                        if (location.length()) {
+                            if (redirects == max_redirects)
+                                throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR), "Maximum redirects");
+
+                            logger::info("Redirecting to " + location);
+
+                            return _request(headers, location, method, body, redirects + 1, max_redirects);
+                        }
+                    }
+
+                    return response_obj;
+                } catch (mysocket::error& e) {
+                    if (recved.load())
+                        throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR), "Connection timed out");
+
+                    client->close();
+
+                    throw e;
+                }
+            } catch (mysocket::error& e) {
+                throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR), e.what());
+            }
+        } catch (dns::error& e) {
+            throw fetch::error(UNKNOWN_ERROR, strstatus(UNKNOWN_ERROR), e.what());
+        }
+    }
+    
+    size_t get_max_redirects() {
+        return _max_redirects.load();
+    }
+
+    size_t get_timeout() {
+        return _timeout.load();
+    }
+
+    std::string http_version() {
+        return "HTTP/1.1";
+    }
+
+    std::atomic<size_t>& max_redirects() {
+        return _max_redirects;
     }
 
     response request(header::map& headers, const std::string url, const std::string method, const std::string body) {
-        return _request(headers, url, method, body, 0);
+        return _request(headers, url, method, body, 0, get_max_redirects());
     }
 
-    size_t& timeout() {
-        return _timeout;
+    void set_max_redirects(const size_t value) {
+        return _max_redirects.store(value);
+    }
+
+    void set_timeout(const size_t value) {
+        _timeout.store(value);
+    }
+
+    std::string strstatus(const status_code status) {
+        switch (status) {
+            case UNKNOWN_ERROR:
+                return "Unknown error";
+            case OK:
+                return "OK";
+            case NO_CONTENT:
+                return "No Content";
+            case FOUND:
+                return "Found";
+            case TEMPORARY_REDIRECT:
+                return "Temporary Redirect";
+            case PERMANENT_REDIRECT:
+                return "Permanent Redirect";
+            case BAD_REQUEST:
+                return "Bad Request";
+            case UNAUTHORIZED:
+                return "Unauthorized";
+            case NOT_FOUND:
+                return "Not Found";
+            case INTERNAL_SERVER_ERROR:
+                return "Internal Server Error";
+            default:
+                break;
+        }
+        
+        return "";
     }
 }
