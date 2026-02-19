@@ -12,11 +12,11 @@ int decimal(const std::string hex) {
 
     for (size_t i = 0; i < hex.length(); i++) {
         int start = hex[i] >= '0' && hex[i] <= '9' ? 
-                    48 : 
-                    hex[i] >= 'A' && hex[i] <= 'Z' ? 
-                    55 : hex[i] >= 'a' && hex[i] <= 'z' ? 
-                    87 : 
-                    INT_MIN;
+             48 : 
+             hex[i] >= 'A' && hex[i] <= 'Z' ? 
+             55 : hex[i] >= 'a' && hex[i] <= 'z' ? 
+             87 : 
+             INT_MIN;
 
         if (start == INT_MIN)
             return INT_MIN;
@@ -31,37 +31,37 @@ std::string decode(const std::string string) {
     if (string.empty())
         return string;
 
-    // find opening double quotations
+    // Find opening double quotations
     size_t l = 0;
     
     while (l < string.length() - 1 && (string[l] == '\\' || string[l] != '\"'))
         l++;
     
-    // none found; return string
+    // None found; return string
     if (l == string.length() - 1)
         return string;
 
-    // copy string
+    // Copy string
     size_t len = string.length() + 1;
     char*  str = new char[len];
     
     strcpy(str, string.c_str());
     
-    // erase opening double quotations
+    // Erase opening double quotations
     for (size_t i = l; i < len - 1; i++)
         std::swap(str[i], str[i + 1]);
     
     len--;
     
-    // find closing double quotations
+    // Find closing double quotations
     size_t r = l;
 
     while (r < len - 2 && (str[r] == '\\' || str[r + 1] != '\"'))
         r++;
 
-    // none found
+    // None found
     if (r == len - 2) {
-        logger::debug("Missing terminating '\"' character: (" + string + ")\n");
+        std::cout << "Missing terminating '\"' character: (" << string << ")\n";
 
         for (size_t i = l; i < len - 2; i++) {
             if (str[i] == '\\' && str[i + 1] == '\"') {
@@ -73,7 +73,7 @@ std::string decode(const std::string string) {
             }
         }
     } else {
-        // erase closing double quotations
+        // Erase closing double quotations
         for (size_t i = ++r; i < len - 1; i++)
             std::swap(str[i], str[i + 1]);
 
@@ -116,7 +116,7 @@ std::string encode(const std::string string) {
     
     strcpy(str, string.c_str());
     
-    // insert leading double quotations
+    // Insert leading double quotations
     str[len] = '\"';
     
     for (size_t i = len; i > 0; i--)
@@ -124,7 +124,7 @@ std::string encode(const std::string string) {
     
     len++;
     
-    // escape double quotations
+    // Escape double quotations
     for (size_t i = 1; i < len - 1; i++) {
         if (str[i] == '\"') {
             // resize, if required
@@ -139,7 +139,7 @@ std::string encode(const std::string string) {
                 str = tmp;
             }
 
-            // insert escape character
+            // Insert escape character
             str[len] = '\\';
             
             for (size_t j = len; j > i; j--)
@@ -150,7 +150,7 @@ std::string encode(const std::string string) {
         }
     }
     
-    // insert trailing double quotoations
+    // Insert trailing double quotoations
     str[len] = '\"';
     
     std::swap(str[len], str[len - 1]);
@@ -169,7 +169,6 @@ std::string encode(const std::string string) {
 bool is_int(const std::string value) {
     int i = 0;
     
-    // leading positive (+) or negative (-) sign
     if (i != value.length() && (value[i] == '+' || value[i] == '-'))
         i++;
     
@@ -192,24 +191,24 @@ bool is_number(const std::string value) {
     
     int i = 0;
     
-    // leading positive (+) or negative (-) sign
+    // Leading positive (+) or negative (-) sign
     if (value[i] == '+' || value[i] == '-')
         i++;
     
-    // find decimal point
+    // Find decimal point
     int j = i;
     
     while (j < value.length() && value[j] != '.')
         j++;
     
-    // if no decimal point is found, start at the beginning (after the sign, if applicable)
-    // find exponent
+    // If no decimal point is found, start at the beginning (after the sign, if applicable)
+    // Find exponent
     int k = j == value.length() ? i : j;
     
     while (k < value.length() && !(value[k] == 'E' || value[k] == 'e'))
         k++;
     
-    // stop at the decimal point, if applicable; otherwise stop at the exponent, if applicable
+    // Stop at the decimal point, if applicable; otherwise stop at the exponent, if applicable
     int l = j < k ? j : k,
         m = i;
     
@@ -217,11 +216,11 @@ bool is_number(const std::string value) {
         if (!isdigit(value[m]))
             return false;
     
-    // count the number of digits between the beginning (after sign, if applicable) and the decimal point (if applicable)
+    // Count the number of digits between the beginning (after sign, if applicable) and the decimal point (if applicable)
     // and the decimal point (if applicable) and the exponent (if applicable)
     size_t n = l - i;
     
-    //  after decimal (if applicable) and before exponent (if applicable)
+    //  After decimal (if applicable) and before exponent (if applicable)
     if (j != value.length()) {
         for (m = j + 1; m < k; m++)
             if (!isdigit(value[m]))
@@ -230,19 +229,19 @@ bool is_number(const std::string value) {
         n += k - j - 1;
     }
     
-    // there are no digits between sign (if applicable) and decimal point (if applicable)
+    // There are no digits between sign (if applicable) and decimal point (if applicable)
     // and/or decimal point (if applicable) and exponent (if applicable)
     if (n == 0)
         return false;
     
-    // after exponent (if applicable)
+    // After exponent (if applicable)
     if (k != value.length()) {
         size_t l = k + 1;
         
         if (l == value.length())
             return false;
         
-        // leading positive (+) or negative (-) sign
+        // Leading positive (+) or negative (-) sign
         if (value[l] == '+' || value[l] == '-')
             l++;
         
@@ -252,7 +251,7 @@ bool is_number(const std::string value) {
         for (; l < value.length(); l++)
             if (!isdigit(value[l]))
                 return false;
-        // single digit
+        // Single digit
     }
     
     return true;
@@ -275,27 +274,27 @@ bool is_string(const std::string value) {
 }
 
 std::string join(std::vector<std::string> values, std::string delimeter) {
-    std::ostringstream oss;
+    std::ostringstream ss;
         
     if (values.size()) {
         for (size_t i = 0; i < values.size() - 1; i++)
-            oss << values[i] << delimeter;
+            ss << values[i] << delimeter;
 
-        oss << values[values.size() - 1];
+        ss << values[values.size() - 1];
     }
         
-    return oss.str();
+    return ss.str();
 }
 
 void merge(std::vector<std::string>& values, const std::string delimiter) {
     for (int i = 0; i < values.size() - 1; i++) {
-        // find opening double quotations
+        // Find opening double quotations
         size_t l = 0;
         
         while (l < values[i].length() && values[i][l] != '\"')
             l++;
         
-        // double quotations found
+        // Double quotations found
         if (l != values[i].length()) {
             // find closing double quotations
             size_t j = l + 1;
@@ -315,11 +314,11 @@ void merge(std::vector<std::string>& values, const std::string delimiter) {
                     j++;
             }
             
-            // none found in the same token
+            // None found in the same token
             if (j == values[i].length()) {
                 bool flag = true;
                 
-                // find closing double quotations in subsequent tokens
+                // Find closing double quotations in subsequent tokens
                 while (flag && i < values.size() - 1) {
                     size_t j = 0;
                     
@@ -333,7 +332,7 @@ void merge(std::vector<std::string>& values, const std::string delimiter) {
                             if ((r - j) % 2 == 0)
                                 j = r;
                             else {
-                                // break nested loop
+                                // Break nested loop
                                 flag = false;
                                 break;
                             }
@@ -341,7 +340,7 @@ void merge(std::vector<std::string>& values, const std::string delimiter) {
                             j++;
                     }
                     
-                    // merge tokens
+                    // Merge tokens
                     values[i] += delimiter + values[i + 1];
 
                     values.erase(values.begin() + i + 1);
@@ -360,10 +359,7 @@ int parse_int(const std::string value) {
 }
 
 int pow2(const int b) {
-    if (b == 0)
-        return 1;
-    
-    return pow(2, ceil(log(b) / log(2)));
+    return b == 0 ? 1 : pow(2, ceil(log(b) / log(2)));
 }
 
 std::vector<std::string> split(const std::string string, const std::string delimeter) {

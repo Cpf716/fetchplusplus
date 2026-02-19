@@ -110,7 +110,7 @@ namespace fetch {
         using map = header::map;
     };
 
-    struct response_t {
+    struct abstract_response {
         // Member Functions
 
         /**
@@ -130,14 +130,32 @@ namespace fetch {
     protected:
         // Member Fields
         
-        header::map   _headers;        
+        header::map   _headers;
         status_code   _status;
         std::string   _status_text;
         std::string   _text;
         trailer::map  _trailers;
+
+        // Constructors
+
+        abstract_response();
     };
 
-    class response: public response_t {
+    class error: public std::exception, public abstract_response {
+        // Member Fields
+
+        std::string _what;
+    public:
+        // Constructors
+
+        error(const status_code status, const std::string status_text, const std::string text = "", header::map headers = {}, trailer::map trailers = {});
+
+        // Member Functions
+
+        const char* what() const throw();
+    };
+
+    class response: public abstract_response {
         // Member Fields
 
         json::object* _json = NULL;
@@ -145,10 +163,6 @@ namespace fetch {
         // Constructors
 
         response(const std::string data);
-
-        // Non-Member Functions
-
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
     public:
         // Constructors
 
@@ -166,6 +180,10 @@ namespace fetch {
     };
 
     class request {
+        // Typedef
+        
+        friend class http_client;
+
         // Constructors
 
         request(header::map& headers, const std::string url, const std::string method, const std::string body);
@@ -174,11 +192,6 @@ namespace fetch {
 
         std::string _message;
         url         _url;
-
-        // Non-Member Functions
-
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
-
 public:
         // Member Functions
 
@@ -187,38 +200,121 @@ public:
         url         url();
     };
 
-    struct error: public std::exception, public response_t {
-        // Constructors
+    class http_client {
+        // Typedef
 
-        error(const status_code status, const std::string status_text, const std::string text = "", header::map headers = {}, trailer::map trailers = {});
+        struct pool {
+            // Typedef
+    
+            class connection {  
+                // Member Fields
+
+                size_t      _max = INT_MAX;
+                size_t      _number = 0;
+                bool        _released = false;
+                size_t      _timeout = 0;
+                tcp_client* _value = NULL;
+            public:
+                // Typedef
+                
+                using map = std::map<std::string, connection>;
+
+                // Constructors
+
+                connection();
+
+                connection(tcp_client* value);
+
+                // Member Functions
+
+                size_t&     max();
+
+                size_t&     number();
+
+                bool&       released();
+
+                size_t&     timeout();
+
+                tcp_client* value() const;
+            };
+
+            friend class http_client;
+            
+            // Constructors
+            
+            pool(const class logger logger);
+
+            // Member Functions
+
+            size_t      close(const std::string host);
+            
+            void        configure(const std::string host, std::function<void(connection*)> cb);
+
+            tcp_client* get_connection(const std::string host, class url url);
+        
+            void        release(const std::string host, class url url);
+        private:
+            // Member Fields
+
+            connection::map _connections;
+            logger          _logger;
+            std::mutex      _mutex;
+            
+            // Member Functions
+            
+            size_t      _close(const std::string host);
+        };
+        
+        // Member Fields
+
+        logger                   _logger;
+        int                      _max_redirects = 20;
+        pool                     _pool = pool(_logger);
+        std::atomic<bool>        _recved = true;
+        std::vector<std::thread> _threads;
+        int                      _timeout = 30;
 
         // Member Functions
+        
+        response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
+    public:
 
-        const char* what() const throw();
-    private:
+        // Constructors
 
-        // Non-Member Functions
+        http_client();
 
-        friend response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
+        http_client(class logger logger);
+
+        ~http_client();
+
+        // Member Functions
+        
+        response get(header::map& headers, const std::string url);
+        
+        response head(header::map& headers, const std::string url, const std::string body = "");
+        
+        int&     max_redirects();
+        
+        response options(header::map& headers, const std::string url);
+        
+        response post(header::map& headers, const std::string url, const std::string body);
+        
+        response put(header::map& headers, const std::string url, const std::string body);
+
+        response request(header::map& headers, const std::string url, const std::string method = "get", const std::string body = "");
+        
+        int&     timeout();
     };
 
     // Non-Member Functions
 
-    size_t               get_max_redirects();
+    // auto        _lock(std::mutex& mtx, auto cb);
 
-    size_t               get_timeout();
+    // response    _parse_response(const std::string data);
 
-    std::string          http_version();
+    std::string http_version();
 
-    std::atomic<size_t>& max_redirects();
-
-    response             request(header::map& headers, const std::string url, const std::string method = "GET", const std::string body = "");
-
-    void                 set_max_redirects(const size_t value);
-
-    void                 set_timeout(const size_t value);
-
-    std::string          strstatus(const status_code status);
+    std::string strstatus(const status_code status);
 }
 
 #endif /* fetch_h */

@@ -7,8 +7,6 @@
 
 #include "dns.h"
 
-// Typedef
-
 namespace dns {
     // Constructors
 

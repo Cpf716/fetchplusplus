@@ -12,25 +12,48 @@ using namespace fetch;
 using namespace json;
 using namespace std;
 
-int main(int argc, const char * argv[]) {
+enum logging parse_logging(const std::string value) {
+    int index = ((map<string, int>) {
+        { "none", 1 },
+        { "info", 2 },
+        { "extended", 3 }
+    })[value] - 1;
+    
+    return index == -1 ? INFO : static_cast<enum logging>(index);
+}
+
+int main(int argc, const char* argv[]) {
+    auto         logging = argc == 1 ? INFO : parse_logging(argv[1]);
+    class logger logger(logging);
+    http_client  http(logger);
+    
+    http.timeout() = 10;
+    http.max_redirects() = 10;
+    
     header::map headers = {
-        { "content-type", "application/json" },
+//         { "content-type", "application/json" },
     };
-    auto        body = new object((vector<object*>) {
+    
+    std::string url = "http://calapi.inadiutorium.cz/api/v0/en/calendars/general-en/today";
+
+//     std::string url = "http://localhost:8080/api/greeting";
+
+    auto body = new object((vector<object*>) {
         new object("firstName", encode("Corey")),
     });
 
     try {
-        auto response = request(headers, "http://localhost:8080/api/greeting", "POST", stringify(body));
-
-        delete body;
+        http.options(headers, url);
         
-        logger::info(stringify(response.json()));
+        auto response = http.get(headers, url);
+
+//         auto response = http.post(headers, url, stringify(body));
+        
+        logger.info(stringify(response.json()));
+        
+        delete body;
     } catch (fetch::error& e) {
         delete body;
-
-        if (e.text().length())
-            throw fetch::error(e.status(), e.text(), e.text(), e.headers());
         
         throw e;
     }
