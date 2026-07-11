@@ -14,7 +14,7 @@ namespace fetch {
 
     http_client::pool::connection::connection() { }
 
-    http_client::pool::connection::connection(tcp_client* value) {
+    http_client::pool::connection::connection(fpp_client* value) {
         this->_value = value;
     }
 
@@ -104,6 +104,11 @@ namespace fetch {
             // Generate content-length, if required
             if (it == headers.end() && body.length())
                 headers.try_emplace("content-length", (int) body.length());
+
+            it = headers.find("accept");
+
+            if (it == headers.end())
+                headers.try_emplace("accept", "*/*");
             
             headers["user-agent"] = std::string("fetch++/0.0");
 
@@ -273,7 +278,7 @@ namespace fetch {
         trailer::map trailers;
 
         if (it == headers.end()) {
-            it = headers.find("transer-encoding");
+            it = headers.find("transfer-encoding");
             
             if (it != headers.end() && (* it).second.str() == "chunked") {
                 // Parse response body
@@ -288,11 +293,15 @@ namespace fetch {
                     if (size <= 0)
                         break;
 
-                    getline(iss, line);
+                    int n = 0;
 
-                    line = trim_end(line);
+                    while (n < size) {
+                        getline(iss, line);
 
-                    chunks.push_back(line.substr(0, std::min(size, (int) line.length())));
+                        chunks.push_back(line.substr(0, std::min(size - n, (int) line.length())));
+
+                        n += line.length();
+                    }
                 }
 
                 text = join(chunks, "\r\n");
@@ -391,7 +400,7 @@ namespace fetch {
         return this->_timeout;
     }
 
-    tcp_client* http_client::pool::connection::value() const {
+    fpp_client* http_client::pool::connection::value() const {
         return this->_value;
     }
 
@@ -442,18 +451,31 @@ namespace fetch {
         class request request(headers, url, method, body);
         class url     url_obj = request.url();
 
-        // TLS is not supported
-        if (url_obj.protocol() == "https")
-            throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), "Operation not permitted");
-        
+        std::string host = url_obj.fully_qualified_host();
+
         this->_recved.store(false);
 
+        std::chrono::time_point start = std::chrono::steady_clock::now();
+
         try {
-            std::chrono::time_point start = std::chrono::steady_clock::now();
-            std::string             host = url_obj.fully_qualified_host();
-            tcp_client*             client = this->_pool.get_connection(host, url_obj);
+            fpp_client* client = this->_pool.get_connection(host, url_obj);
             
             this->_logger.extended(request.message());
+
+            std::exception_ptr e;
+
+            auto catch_error = [this, host, &e](fpp_error& error) {
+                try {
+                    if (this->_recved.load())
+                        throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), "Connection timed out");
+
+                    this->_pool.close(host);
+
+                    throw error;
+                } catch (...) {
+                    e = std::current_exception();
+                }
+            };
 
             try {
                 client->send(request.message());
@@ -490,32 +512,41 @@ namespace fetch {
                 // Preserve reference
                 header::map response_headers = response_obj.headers();
 
-                if (tolowerstr(response_headers["connection"]) == "keep-alive") {
-                    header::map::iterator it = response_headers.find("keep-alive");
-                    int                   timeout;
-                    url::param::map       keep_alive;
+                if (response_obj.text().length() &&
+                    !(response_headers.find("content-length") == response_headers.end() &&
+                    response_headers.find("transfer-encoding") == response_headers.end())) {
+                        auto it = response_headers.find("connection");
 
-                    if (it == response_headers.end())
-                        timeout = 5;
-                    else {
-                        keep_alive = url::query_string(join((* it).second.list(), "&")).params();
+                        if (it != response_headers.end() && (* it).second == "keep-alive") {
+                            auto it = response_headers.find("keep-alive");
+                            int  timeout;
 
-                        // Implicitly converted from NAN to INT_MIN
-                        timeout = floor(keep_alive["timeout"].number());
+                            url::param::map keep_alive;
 
-                        if (timeout < 1)
-                            timeout = 5;
-                    }
-                    
-                    this->_pool.configure(host, [timeout, &keep_alive](pool::connection* connection) {
-                        connection->timeout() = timeout;
+                            if (it == response_headers.end())
+                                timeout = 5;
+                            else {
+                                keep_alive = url::query_string(join((* it).second.list(), "&")).params();
 
-                        int max = floor(keep_alive["max"].number());
+                                // Implicitly converted from NAN to INT_MIN
+                                timeout = floor(keep_alive["timeout"].number());
 
-                        if (max >= 1)
-                            connection->max() = max;
-                    });
-                    this->_pool.release(host, url_obj);
+                                if (timeout < 1)
+                                    timeout = 5;
+                            }
+                            
+                            this->_pool.configure(host, [timeout, &keep_alive](pool::connection* connection) {
+                                connection->timeout() = timeout;
+
+                                int max = floor(keep_alive["max"].number());
+
+                                if (max >= 1)
+                                    connection->max() = max;
+                            });
+                            this->_pool.release(host, url_obj);
+                        } else
+                            this->_pool.close(host);
+                    // Terminate connection if no content-length or transfer-encoding header is received; prevents desync
                 } else
                     this->_pool.close(host);
                 
@@ -543,14 +574,19 @@ namespace fetch {
 
                 return response_obj;
             } catch (mysocket::error& e) {
-                if (this->_recved.load())
-                    throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), "Connection timed out");
-
-                this->_pool.close(host);
-
-                throw e;
+                catch_error(e);
+            } catch (tls::error& e) {
+                catch_error(e);
             }
+
+            if (e) {
+                rethrow_exception(e);
+            }
+            
+            return response();
         } catch (mysocket::error& e) {
+            throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
+        } catch (tls::error& e) {
             throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
         }
     }
@@ -666,35 +702,40 @@ namespace fetch {
         });
     }
 
-    tcp_client* http_client::pool::get_connection(std::string host, class url url) {
+    fpp_client* http_client::pool::get_connection(std::string host, class url url) {
         size_t count = 0;
         
-        tcp_client* connection = _lock(this->_mutex, [this, host, &count]() -> tcp_client* {
+        fpp_client* connection = _lock(this->_mutex, [this, host, &count]() -> fpp_client* {
             auto it = this->_connections.find(host);
 
+            // Connection not found
             if (it == this->_connections.end()) {
                 return NULL;
             }
 
             http_client::pool::connection* connection = &(* it).second;
 
+            // Connection available; reserve and return
             if (connection->released()) {
                 connection->released() = false;
                 
                 return connection->value();
             }
             
+            // Connection found but busy; find next available connection
             while (true) {
                 count++;
 
                 it = this->_connections.find(host + "-" + std::to_string(count));
                 
+                // Connection not found
                 if (it == this->_connections.end()) {
                     break;
                 }
 
                 connection = &(* it).second;
                 
+                // Connection available; reserve and return
                 if (connection->released()) {
                     connection->released() = false;
                     
@@ -705,28 +746,42 @@ namespace fetch {
             return NULL;
         });
 
+        // Connection not found / available; create new connection
         if (connection == NULL) {
-            try {
-                std::vector<class host> hosts = lookup(url);
-
+            if (url.protocol() == "https") {
                 try {
-                    connection = new tcp_client(hosts[0].ip(), url.port());
-                    
-                    this->_logger.extended("* Connected to " + url.host() + "(" + hosts[0].ip() + ") port " + std::to_string(url.port()));
-                    
-                    if (count) {
-                        host += "-" + std::to_string(count);
-                    }
+                    tls::set_logging(this->_logger.logging());
 
-                    _lock(this->_mutex, [this, host, connection]() {
-                        return this->_connections.try_emplace(host, pool::connection(connection));
-                    });
-                } catch (mysocket::error& e) {
+                    // TLS "client hello" requires fully-qualified hostname; therefore, DNS resolution is performed internally
+                    connection = new tls_client(host, url.port());
+                } catch (tls::error& e) {
                     throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
                 }
-            } catch (dns::error& e) {
-                throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
+            } else {
+                // Standard tcp_client is more rudamentary and requires explicit DNS resolution
+                try {
+                    std::vector<class host> hosts = lookup(url);
+
+                    try {
+                        connection = new tcp_client(hosts[0].ip(), url.port());
+                        
+                        this->_logger.extended("* Connected to " + url.host() + "(" + hosts[0].ip() + ") port " + std::to_string(url.port()));
+                    } catch (mysocket::error& e) {
+                        throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
+                    }
+                } catch (dns::error& e) {
+                    throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
+                }
             }
+            
+            // Suffix "host-n"
+            if (count) {
+                host += "-" + std::to_string(count);
+            }
+
+            _lock(this->_mutex, [this, host, connection]() {
+                return this->_connections.try_emplace(host, pool::connection(connection));
+            });
         } else
             this->_logger.extended("* Getting pooled connection for host " + url.host());
 
@@ -779,8 +834,12 @@ namespace fetch {
     }
 
     json::object* response::json() {
-        if (this->_json == NULL)
-            this->_json = json::parse(starts_with(this->get("content-type"), "application/json") ? this->text() : "");
+        if (this->_json == NULL) {
+            if (!starts_with(this->get("content-type"), "application/json")) {
+                throw json::error("Response is not JSON");
+            }
+        }
+            this->_json = json::parse(this->text());
 
         return this->_json;
     }

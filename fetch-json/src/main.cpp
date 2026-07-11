@@ -37,48 +37,92 @@ int main(int argc, const char* argv[]) {
     set_logging(argc, argv);
 
     http_client http(_logger);
-
-    header::map h1, h2, h3;
-
-    // Initialize null exception_ptr
-    exception_ptr e;
-
-    // Initialize latch with the number of requests
-    cpp17_latch latch(2);
-
-    // cpp17_latch latch(3);
-
-    auto cb = [&e, &latch](class response response, fetch::error error) {
-        try {
-            // Throw error so it can be captured
-            if (!response.ok())
-                throw error;
-        } catch (...) {
-            e = current_exception();
-        }
-
-        latch.count_down();
-    };
+    header::map headers;
 
     try {
-        http.get(h1, "http://localhost:8080/api/ping", cb);
+        cout << "VIN? (optional) ";
 
-        unique_ptr<object> body = make_unique<object>((vector<object*>) {
-            new object("firstName", encode("$hy"))
-        });
+        // https://randomvin.com/
+        string vin;
 
-        http.post(h2, "http://localhost:8080/api/greeting", body.get(), cb);
+        getline(cin, vin);
 
-        // Fetch undefined path
-        // http.get(h3, "http://localhost:8080/api/no-path", cb);
+        if (vin.empty()) {
+            auto response = http.get(headers, "https://randomvin.com/getvin.php?type=fake");
+
+            vin = trim_start(response.text());
+
+            headers = { };
+        }
+
+        class url url("https://vpic.nhtsa.dot.gov/api/vehicles/decodevin/" + vin);
+
+        url.params()["format"] = string("json");
+
+        cout << "Decoding VIN: " << vin << "...\n";
+
+       // Problem: responses nearing millions of bytes only come through partially
+    //    auto response = http.get(headers, "https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes?format=json");
+
+        auto response = http.get(headers, url.str());
+        auto json = response.json();
+        auto results = (json::array *) json->get("Results");
         
-        // Block the main thread until all asynchronous requests have returned
-        latch.wait();
+        exception_ptr e;
+        
+        auto find = [results, &e](string variable) -> string {
+            int i = 0;
 
-        // Throw error on main thread if one or more requests returned an error
+            while (i < results->size() && decode(results->get(i)->get("Variable")->value()) != variable)
+                i++;
+            
+            try {
+                if (i == results->size())
+                    throw runtime_error("Decoding failed");
+                
+                return results->get(i)->get("Value")->value();
+            } catch (...) {
+                e = current_exception();
+            }
+            
+            return "";
+        };
+
+        string year = find("Model Year"),
+                make = find("Make"),
+                model = find("Model");
+
         if (e) {
             rethrow_exception(e);
         }
+        
+        year = decode(year);
+        make = decode(make);
+        model = decode(model);
+
+        string vehicle = join((vector<string>) { year, make, model }, " ");
+        string displacement = find("Displacement (L)"),
+                engine = "";
+
+        if (!(e || displacement == null()))
+            engine += decode(displacement) + "L";
+        
+        string cylinders = find("Engine Number of Cylinders");
+
+        if (!(e || cylinders == null())) {
+            if (engine.length())
+                engine += " ";
+
+            engine += decode(cylinders) + " cyl";
+        }
+
+        if (engine.length())
+            vehicle += " " + engine;
+
+        cout << "Decoded to a " << vehicle << ".\n";
+
+        // Problem:
+        // json::object::_map_keys(...) is not being properly invoked upon parse; therefore _key_map.size() = 0 and I am unable to lookup child objects
     } catch (fetch::error& e) {
         throw e;
     }

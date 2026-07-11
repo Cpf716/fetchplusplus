@@ -391,10 +391,10 @@ namespace json {
     }
 
     void object::_map_keys() {
-        size_t i = 0;
+        size_t i;
 
-        while (i < this->_values.size() && this->_values[i]->key().empty())
-            i++;
+        for (i = 0; i < this->_values.size() && this->_values[i]->key().empty(); i++)
+            this->_values[i]->_map_keys();
 
         for (; i < this->_values.size(); i++) {
             if (this->_values[i]->key().empty())
@@ -480,7 +480,7 @@ namespace json {
                 // Anonymous value
             } else if (source[i] == "{") {
                 size_t j,
-                       p = 1;
+                        p = 1;
                 
                 for (j = i + 1; j < end; j++) {
                     if (source[j] == "{")
@@ -504,7 +504,7 @@ namespace json {
                 i = j + 1;
             } else if (source[i] == "[") {
                 size_t j,
-                       p = 1;
+                        p = 1;
                 
                 for (j = i + 1; j < end; j++) {
                     if (source[j] == "[")

@@ -12,11 +12,13 @@
 #include "json.h"
 #include "logger.h"
 #include "socket.h"
+#include "tls.h"
 #include <fstream>
 
 using namespace dns;
 using namespace json;
 using namespace mysocket;
+using namespace tls;
 
 namespace fetch {
     // Typedef
@@ -211,11 +213,11 @@ public:
             class connection {  
                 // Member Fields
 
-                size_t      _max = INT_MAX;
-                size_t      _number = 0;
-                bool        _released = false;
-                size_t      _timeout = 0;
-                tcp_client* _value = NULL;
+                size_t     _max = INT_MAX;
+                size_t     _number = 0;
+                bool       _released = false;
+                size_t     _timeout = 0;
+                fpp_client* _value = NULL;
             public:
                 // Typedef
                 
@@ -225,19 +227,19 @@ public:
 
                 connection();
 
-                connection(tcp_client* value);
+                connection(fpp_client* value);
 
                 // Member Functions
 
-                size_t&     max();
+                size_t&    max();
 
-                size_t&     number();
+                size_t&    number();
 
-                bool&       released();
+                bool&      released();
 
-                size_t&     timeout();
+                size_t&    timeout();
 
-                tcp_client* value() const;
+                fpp_client* value() const;
             };
 
             friend class http_client;
@@ -252,7 +254,7 @@ public:
             
             void        configure(const std::string host, std::function<void(connection*)> cb);
 
-            tcp_client* get_connection(const std::string host, class url url);
+            fpp_client*  get_connection(const std::string host, class url url);
         
             void        release(const std::string host, class url url);
         private:

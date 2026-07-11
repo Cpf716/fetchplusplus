@@ -84,4 +84,6 @@ std::string              trim(const std::string string);
 
 std::string              trim_end(const std::string string);
 
+std::string              trim_start(const std::string string);
+
 #endif /* util_h */

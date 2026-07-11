@@ -69,8 +69,22 @@ url::query_string::query_string(const std::string value) {
 
         if (tokens.size() >= 3)
             throw error("Unexpected token = in URL");
-        
-        this->_params[tokens[0]] = tokens.size() == 1 ? "" : tokens[1];
+
+        std::string key = tokens[0];
+
+        auto it = this->params().find(key);
+
+        struct param value = tokens.size() == 1 ? "" : tokens[1];
+
+        if (it == this->params().end()) {
+            this->_params.try_emplace(key, value);
+        } else {
+            std::vector<std::string> new_value = (* it).second.list();
+            
+            new_value.push_back(value);
+
+            this->params()[key] = new_value;
+        }
     }
 }
 
@@ -190,7 +204,8 @@ const char* url::error::what() const throw() {
 
 double url::param::_set(const double value) {
     this->_number = value;
-    this->_str = std::to_string(this->number());
+    this->_str = this->number() - (int) this->number() == 0 ? std::to_string((int) this->number()) :
+                    std::to_string(this->number());
     this->_list = { this->str() };
 
     return this->number();
@@ -243,14 +258,21 @@ std::string url::query_string::str() {
     std::ostringstream ss;
 
     if (this->params().size()) {
-        size_t               index = 0;
-        param::map           params = this->params();
-        param::map::iterator it = params.begin();
+        size_t     index = 0;
+        param::map params = this->params();
+
+        auto it = params.begin();
 
         for (; index < params.size() - 1; index++, it++)
-            ss << (* it).first << "=" << (* it).second.str() << "&";
+            for (std::string value: (* it).second.list())
+                ss << (* it).first << "=" << value << "&";
 
-        ss << (* it).first << "=" << (* it).second.str();
+        std::vector<std::string> list = (* it).second.list();
+
+        for (size_t i = 0; i < list.size() - 1; i++)
+            ss << (* it).first << "=" << list[i] << "&";
+
+        ss << (* it).first << "=" << list[list.size() - 1];
     }
     
     return ss.str();

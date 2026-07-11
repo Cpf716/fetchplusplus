@@ -8,6 +8,7 @@
 #ifndef socket_h
 #define socket_h
 
+#include "fpp_client.h"
 #include "util.h"
 #include <arpa/inet.h>  // inet_ptons
 #include <csignal>      // signal
@@ -20,7 +21,7 @@
 namespace mysocket {
     // Typedef
     
-    struct error: public std::exception {
+    struct error: public fpp_error {
         // Constructors
 
         error(const int errnum);
@@ -28,16 +29,13 @@ namespace mysocket {
         // Member Fields
 
         int         errnum() const;
-
-        const char* what() const throw();
     private:
         // Member Fields
 
         int         _errnum = 0;
-        std::string _what;
     };
 
-    struct tcp_client {
+    struct tcp_client: public fpp_client {
         // Constructors
 
         tcp_client(const std::string host, const int port);
@@ -46,9 +44,9 @@ namespace mysocket {
 
         void        close();
 
-        std::string recv() const;
+        std::string recv();
 
-        int         send(const std::string message) const;
+        int         send(const std::string message);
     private:
         // Constructors
 

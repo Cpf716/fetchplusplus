@@ -488,3 +488,12 @@ std::string trim_end(const std::string string) {
         
     return string.substr(0, end);
 }
+
+std::string trim_start(const std::string string) {
+    size_t start = 0;
+
+    while (start < string.length() && isspace(string[start]))
+        start++;
+        
+    return string.substr(start);
+}
