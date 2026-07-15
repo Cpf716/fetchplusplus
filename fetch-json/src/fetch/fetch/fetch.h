@@ -267,6 +267,7 @@ public:
             connection::map          _connections;
             logger                   _logger;
             std::mutex               _mutex;
+            std::atomic<bool>        _shut_down = false;
             std::vector<std::thread> _threads;
             
             // Member Functions

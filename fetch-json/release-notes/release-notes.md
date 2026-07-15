@@ -17,5 +17,9 @@ Please see `main.cpp` for sample code.
 * Fix a bug where pooled connections may close while in use, triggering segfaults
 * Simplify test server
 
+### Addendum
+* Fix a bug where pooled connections are delaying program exit
+* Fix a bug where large responses with content-length header may time out
+
 ### Limitations
 * Transfer-encoding chunk size lines must not cross packet boundaries

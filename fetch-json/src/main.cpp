@@ -39,7 +39,7 @@ void set_logging(map<string, string> options) {
     auto it = options.find("-l");
 
     if (it == options.end())
-        it = options.find("-log");
+        it = options.find("--log");
 
     http.set_logging(
         it == options.end() ?
