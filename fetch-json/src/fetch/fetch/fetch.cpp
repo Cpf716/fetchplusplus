@@ -150,6 +150,8 @@ namespace fetch {
     }
 
     http_client::pool::~pool() {
+        this->_shut_down.store(true);
+
         for (size_t i = 0; i < this->_threads.size(); i++)
             if (this->_threads[i].joinable())
                 this->_threads[i].join();
@@ -268,9 +270,15 @@ namespace fetch {
         std::string  text;
         trailer::map trailers;
 
-        std::ostringstream oss;
+        std::stringstream oss;
 
         oss << iss.rdbuf();
+
+        // Reset oss if iss' buffer was empty
+        if (oss.eof() || oss.fail()) {
+            oss.seekp(0, std::ios::beg);
+            oss.clear();
+        }
 
         if (it == headers.end()) {
             it = headers.find("transfer-encoding");
@@ -329,13 +337,16 @@ namespace fetch {
                 }
             }
         } else {
+            int len = oss.str().length();
+
             // Fetch additional packets as required
-            while (oss.str().length() < (* it).second.int_value()) {
+            while (len < (* it).second.int_value()) {
                 std::string response = client->recv();
 
                 this->_logger.more(response);
 
-                oss << response.substr(0, std::min(response.length(), (* it).second.int_value() - oss.str().length()));
+                oss << response;
+                len += response.size();
             }
 
             text = oss.str().substr(0, std::min((* it).second.int_value(), (int) oss.str().length()));
@@ -839,7 +850,7 @@ namespace fetch {
         this->_threads.push_back(std::thread([timeout, this, host, number](std::string fully_qualified_host) {
             this->_logger.more("* Connection to host " + fully_qualified_host + " left intact");
             
-            for (size_t i = 0; i < timeout; i++)
+            for (size_t i = 0; i < timeout && !this->_shut_down.load(); i++)
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
             
             _lock(this->_mutex, [this, host, number] {
