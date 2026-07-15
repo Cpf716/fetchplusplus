@@ -9,34 +9,37 @@
 
 // Constructors
 
-logger::logger() : logger(INFO) { }
+logger::logger() : logger(LOG_SOME) { }
 
-logger::logger(const enum logging logging) {
-    this->_logging = logging;
+logger::logger(const logging level) {
+    this->_level = level;
 }
 
 // Non-Member Functions
 
-void _write(const std::string message) {
+void _log(const std::string message) {
     std::cout << message << std::endl;
 }
 
 // Member Functions
 
 void logger::error(const std::string message) {
-    _write("Error - " + message);
+    _log("Error - " + message);
 }
 
-void logger::extended(const std::string message) {
-    if (this->logging() == EXTENDED)
-        _write(message);
+logging& logger::level() {
+    return this->_level;
 }
 
-void logger::info(const std::string message) {
-    if (this->logging() >= INFO)
-        _write(message);
+void logger::log(const enum logging logging, const std::string message) {
+    if (this->level() >= logging)
+        _log(message);
 }
 
-enum logging& logger::logging() {
-    return this->_logging;
+void logger::more(const std::string message) {
+    this->log(LOG_MORE, message);
+}
+
+void logger::some(const std::string message) {
+    this->log(LOG_SOME, message);
 }

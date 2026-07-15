@@ -8,6 +8,8 @@
 #include "util.h"
 
 int decimal(const std::string hex) {
+    assert(hex.length());
+
     int result = 0;
 
     for (size_t i = 0; i < hex.length(); i++) {
@@ -353,12 +355,34 @@ void merge(std::vector<std::string>& values, const std::string delimiter) {
     }
 }
 
-double parse_number(const std::string value) {
-    return is_number(value) ? stod(value) : NAN;
+std::map<std::string, std::string> options(int argc, const char* argv[]) {
+    std::map<std::string, std::string> options;
+
+    for (int i = 0; i < argc; i++) {
+        // Has option (- or -- prefix)?
+        if (starts_with(argv[i], "-")) {
+            std::string key = argv[i],
+                         value = "";
+
+            // Option has argument (non-option in sequence)?
+            if (i < argc - 1 && !starts_with(argv[i + 1], "-")) {
+                value = std::string(argv[i + 1]);
+                i++;
+            }
+
+            options.try_emplace(key, value);
+        }
+    }
+
+    return options;
 }
 
 int parse_int(const std::string value) {
     return is_int(value) ? stoi(value) : INT_MIN;
+}
+
+double parse_number(const std::string value) {
+    return is_number(value) ? stod(value) : NAN;
 }
 
 int pow2(const int b) {
@@ -366,11 +390,12 @@ int pow2(const int b) {
 }
 
 std::vector<std::string> split(const std::string string, const std::string delimeter) {
+    int start = 0;
+    
     std::vector<std::string> result;
-    size_t                   start = 0;
 
     for (int end = 0; end <= (int) string.length() - (int) delimeter.length(); end++) {
-        size_t index = 0;
+        int index = 0;
 
         while (index < delimeter.length() && string[end + index] == delimeter[index])
             index++;
@@ -388,10 +413,10 @@ std::vector<std::string> split(const std::string string, const std::string delim
 }
 
 void split(std::vector<std::string>& target, const std::string source, const std::string delimeter) {
-    size_t start = 0;
+    int start = 0;
 
     for (int end = 0; end <= (int) source.length() - (int) delimeter.length(); end++) {
-        size_t index = 0;
+        int index = 0;
 
         while (index < delimeter.length() && source[end + index] == delimeter[index])
             index++;
@@ -487,4 +512,13 @@ std::string trim_end(const std::string string) {
         end--;
         
     return string.substr(0, end);
+}
+
+std::string trim_start(const std::string string) {
+    size_t start = 0;
+
+    while (start < string.length() && isspace(string[start]))
+        start++;
+        
+    return string.substr(start);
 }

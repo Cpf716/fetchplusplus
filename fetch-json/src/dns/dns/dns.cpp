@@ -40,10 +40,11 @@ namespace dns {
 
         memset(&hints, 0, sizeof hints);
 
-        // hints.ai_family = AF_UNSPEC;     // IPv4 or IPv6
+        hints.ai_family = AF_UNSPEC;     // IPv4 or IPv6
         
         // Remedy: error code 1003
-        hints.ai_family = AF_INET;     // IPv4
+        // hints.ai_family = AF_INET;     // IPv4
+        
         hints.ai_socktype = SOCK_STREAM; // TCP
 
         int              s;

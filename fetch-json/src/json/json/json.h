@@ -10,7 +10,6 @@
 
 #include "util.h"
 #include <cassert>
-#include <map>
 
 namespace json {
     // Typedef
@@ -32,7 +31,7 @@ namespace json {
     struct object {
         // Typedef
         
-        enum type { ARRAY, OBJECT, PRIMITIVE };
+        enum type { JSON_ARRAY_TYPE, JSON_OBJECT_TYPE, JSON_PRIMITIVE_TYPE };
         
         // Constructors
         
@@ -54,7 +53,7 @@ namespace json {
         
         object(const std::string key, const std::string value);
 
-        object(const std::vector<object*> values, const enum type type = OBJECT);
+        object(const std::vector<object*> values, const enum type type = JSON_OBJECT_TYPE);
 
         ~object();
 
@@ -113,11 +112,15 @@ namespace json {
 
         // Non-Member Functions
 
-        friend std::string          __stringify(object* value);
+        friend void                 __pretty_print(std::ostringstream& ss, object* value, const int index);
+
+        friend void                 _pretty_print(std::ostringstream& ss, object* value, const int index);
+
+        friend void                 _stringify(std::ostringstream& ss, object* value, const int index);
 
         friend object*              assign(object* target, object* source);
 
-        friend std::string          stringify(object* value);
+        friend std::string          stringify(object* value, bool pretty);
 
         friend std::vector<object*> values(object* value);
     protected:
@@ -128,20 +131,18 @@ namespace json {
     private:
         // Member Fields
         
-        std::vector<std::pair<std::string, size_t>> _key_map;
-        enum type                                   _type = PRIMITIVE;
-        std::string                                 _value;
+        std::unordered_map<std::string, size_t> _key_map;
+        enum type                               _type = JSON_PRIMITIVE_TYPE;
+        std::string                             _value;
         
         // Member Functions
 
-        void    _erase(const size_t index);
+        void    _erase(const std::string key);
 
         /**
          * Perform binary search and return the relative index of key
          */
         int     _find(const std::string key);
-        
-        int     _find(const std::string key, const int start, const int end);
 
         /**
          * Build key map
@@ -153,7 +154,7 @@ namespace json {
          */
         void    _parse(const std::string text);
         
-        object* _parse(object* target, std::vector<std::string>& source, const size_t start, const size_t end);
+        object* _parse(object* target, std::vector<std::string>& source, const int start, const int end);
     };
 
     class array: public object {
@@ -264,7 +265,7 @@ namespace json {
 
     object*                                      parse(const std::string text);
 
-    std::string                                  stringify(object* value);
+    std::string                                  stringify(object* value, bool pretty = false);
 
     std::string                                  typestr(object* value);
 

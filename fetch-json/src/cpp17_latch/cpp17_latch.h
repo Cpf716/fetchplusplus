@@ -1,3 +1,13 @@
+//
+//  cpp17_latch.h
+//  fetch-json
+//
+//  Created by Corey Ferguson on 7/9/26.
+//
+
+#ifndef cpp17_latch_h
+#define cpp17_latch_h
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -19,3 +29,5 @@ public:
 
     void wait();
 };
+
+#endif /* cpp17_latch_h */

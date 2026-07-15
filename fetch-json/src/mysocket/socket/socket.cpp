@@ -11,16 +11,16 @@ namespace mysocket {
     // Non-Member Functions
 
     std::string _recv(const int file_descriptor) {
-        char buff[1024] = {0};
+        char buff[BUFF_LEN] = {0};
             
-        ssize_t len = recv(file_descriptor, buff, 1024, 0);
+        ssize_t len = recv(file_descriptor, buff, BUFF_LEN, 0);
 
         if (len == -1)
             throw mysocket::error(errno);
 
         buff[len] = '\0';
         
-        return trim_end(std::string(buff));
+        return std::string(buff);
     }
 
     int _send(const int file_descriptor, const std::string message) {
@@ -105,7 +105,7 @@ namespace mysocket {
             throw mysocket::error(errno);
         }
         
-        this->_listener = std::thread([&]{
+        this->_listener = std::thread([this] {
             while (true) {
                 if (this->_shut_down.load())
                     return;
@@ -314,7 +314,7 @@ namespace mysocket {
         return _recv(this->_file_descriptor);
     }
 
-    std::string tcp_client::recv() const {
+    std::string tcp_client::recv() {
         return _recv(this->_file_descriptor);
     }
 
@@ -335,7 +335,7 @@ namespace mysocket {
         return _send(this->_file_descriptor, message);
     }
 
-    int tcp_client::send(const std::string message) const {
+    int tcp_client::send(const std::string message) {
         return _send(this->_file_descriptor, message);
     }
 
@@ -348,7 +348,7 @@ namespace mysocket {
         return (int) len;
     }
 
-    const char* error::what() const throw() {
+    const char* fpp_error::what() const throw() {
         return this->_what.c_str();
     }
 }

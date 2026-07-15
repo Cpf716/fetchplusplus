@@ -12,7 +12,6 @@ class RequestService {
     // Non-Member Functions
     
     static receive = (url, body) => LoggerService.info({
-        date: new Date().toISOString().split('T').join(' '),
         url,
         body
     });
