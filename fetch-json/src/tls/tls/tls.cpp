@@ -1,9 +1,26 @@
+//
+//  tls.cpp
+//  fetch-json
+//
+//  Created by Corey Ferguson on 7/10/26.
+//
+
 #include "tls.h"
 
 namespace tls {
     // Non-Member Fields
 
     class logger _logger;
+
+    // Non-Member Functions
+
+    std::string ca_path() {
+        return "/etc/ssl/cert.pem";
+    }
+
+    void set_logging(logging value) {
+        _logger.level() = value;
+    }
 
     // Constructors
 
@@ -20,6 +37,13 @@ namespace tls {
         mbedtls_x509_crt_init(&cacert);
         mbedtls_entropy_init(&entropy);
         mbedtls_ctr_drbg_init(&ctr_drbg);
+
+        if (_logger.level() == LOG_MORE_TLS) {
+            mbedtls_debug_set_threshold(4);
+            mbedtls_ssl_conf_dbg(&conf, [](void* ctx, int level, const char* file, int line, const char* str) {
+                _logger.more(trim_end(str));
+            }, NULL);
+        }
 
         // Initialize seed for the RNG
         if ((mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers, strlen(pers)))) {
@@ -38,7 +62,10 @@ namespace tls {
             throw tls::error("Memory allocation failed");
         }
 
-        // Require SSL?
+        // Request HTTP/1.1 connection
+        mbedtls_ssl_conf_alpn_protocols(&conf, (const char*[]) { "http/1.1", NULL });
+
+        // Require valid CA certificate
         mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED);
         mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
 
@@ -54,7 +81,7 @@ namespace tls {
 
         // Set hostname
         if ((errnum = mbedtls_ssl_set_hostname(&ssl, hostname.c_str()))) {
-            throw tls::error([errnum]() {
+            throw tls::error([errnum] {
                 switch (errnum) {
                     case MBEDTLS_ERR_SSL_ALLOC_FAILED:
                         return "Memory allocation failed";
@@ -73,7 +100,7 @@ namespace tls {
 
             // Connect to the server
             if ((errnum = mbedtls_net_connect(&server_fd, hosts[0].ip().c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP))) {
-                throw tls::error([errnum]() {
+                throw tls::error([errnum] {
                     switch (errnum) {
                         case MBEDTLS_ERR_NET_SOCKET_FAILED:
                             return "Socket failed";
@@ -87,26 +114,15 @@ namespace tls {
                 }());
             }
 
-            // Set socket to non-blocking
-            int flags = fcntl(server_fd.fd, F_GETFL, 0);
-            
-            if (flags == -1 || fcntl(server_fd.fd, F_SETFL, flags | O_NONBLOCK) == -1) {
-                throw tls::error("Setting socket options failed");
-            }
-
             // Bind socket to the SSL context
             mbedtls_ssl_set_bio(&ssl, &server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
 
             // Perform SSL handshake
-            while ((errnum = mbedtls_ssl_handshake(&ssl))) {
-                if (!(errnum == MBEDTLS_ERR_SSL_WANT_READ || errnum == MBEDTLS_ERR_SSL_WANT_WRITE)) {
-                    // if (errnum == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) { }
-                    
+            while ((errnum = mbedtls_ssl_handshake(&ssl)))
+                if (!(errnum == MBEDTLS_ERR_SSL_WANT_READ || errnum == MBEDTLS_ERR_SSL_WANT_WRITE))
                     throw tls::error("SSL handshake failed");
-                }
-            }
 
-            _logger.extended("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
+            _logger.more("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
         } catch (dns::error& e) {
             throw tls::error(e.what());
         }
@@ -126,34 +142,13 @@ namespace tls {
     }
 
     std::string tls_client::recv() {
-        int           len,
-                        total = 0;
+        int           len;
         unsigned char buf[BUFF_LEN];
 
-        // Listen for initial packet
-        while ((len = mbedtls_ssl_read(&this->ssl, buf, sizeof(buf))) <= 0) {
-            if (len == MBEDTLS_ERR_SSL_WANT_READ)
-                continue;
-
+        if ((len = mbedtls_ssl_read(&this->ssl, buf, sizeof(buf))) <= 0)
             throw tls::error("Receive failed");
-        }
-
-        total += len;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-
-        // Listen until all packets are received
-        while ((len = mbedtls_ssl_read(&this->ssl, buf + total, sizeof(buf) - total)) > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-
-            total += len;
-        }
-
-        if (!(len == 0 || len == MBEDTLS_ERR_SSL_WANT_READ)) {
-            throw tls::error("Receive failed");
-        }
-
-        return trim_end(std::string(reinterpret_cast<const char*>(buf)));
+        
+        return std::string(reinterpret_cast<const char*>(buf), len);
     }
 
     int tls_client::send(std::string message) {
@@ -171,15 +166,5 @@ namespace tls {
         }
 
         return total;
-    }
-
-    // Non-Member Functions
-
-    std::string ca_path() {
-        return "/etc/ssl/cert.pem";
-    }
-
-    void set_logging(logging value) {
-        _logger.logging() = value;
     }
 }

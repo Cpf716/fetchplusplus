@@ -86,9 +86,7 @@ try {
     latch.wait();
 
     // Throw error on main thread if one or more requests returned an error
-    if (e) {
-        rethrow_exception(e);
-    }
+    if (e) rethrow_exception(e);
 } catch (fetch::error& e) {
     throw e;
 }

@@ -231,38 +231,43 @@ public:
 
                 // Member Functions
 
-                size_t&    max();
+                size_t&     max();
 
-                size_t&    number();
+                // Maintains states between threads and enforces keep-alive max
+                size_t&     number();
 
-                bool&      released();
+                // Is connection available for reuse?
+                bool&       released();
 
-                size_t&    timeout();
+                size_t&     timeout();
 
                 fpp_client* value() const;
             };
 
             friend class http_client;
-            
+
             // Constructors
-            
-            pool(const class logger logger);
+
+            ~pool();
 
             // Member Functions
 
             size_t      close(const std::string host);
             
-            void        configure(const std::string host, std::function<void(connection*)> cb);
+            void        config(const std::string host, std::function<void(connection*)> cb);
 
-            fpp_client*  get_connection(const std::string host, class url url);
+            fpp_client* get_connection(const std::string host, class url url);
         
             void        release(const std::string host, class url url);
+
+            void        set_logging(const logging level);
         private:
             // Member Fields
 
-            connection::map _connections;
-            logger          _logger;
-            std::mutex      _mutex;
+            connection::map          _connections;
+            logger                   _logger;
+            std::mutex               _mutex;
+            std::vector<std::thread> _threads;
             
             // Member Functions
             
@@ -273,21 +278,18 @@ public:
 
         logger                   _logger;
         int                      _max_redirects = 20;
-        pool                     _pool = pool(_logger);
-        std::atomic<bool>        _recved = true;
+        pool                     _pool;
         std::vector<std::thread> _threads;
         int                      _timeout = 30;
 
         // Member Functions
+
+        response _parse_response(fpp_client* client, const std::string data);
         
         response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
     public:
 
         // Constructors
-
-        http_client();
-
-        http_client(class logger logger);
 
         ~http_client();
 
@@ -326,6 +328,8 @@ public:
         response request(header::map& headers, const std::string url, const std::string method, object* body);
 
         void     request(header::map& headers, const std::string url, const std::string method, const std::string body, std::function<void(response, fetch::error)> cb);
+
+        void     set_logging(const logging level);
         
         int&     timeout();
     };
@@ -333,8 +337,6 @@ public:
     // Non-Member Functions
 
     // auto        _lock(std::mutex& mtx, auto cb);
-
-    // response    _parse_response(const std::string data);
 
     std::string statusstr(const status_code status);
 }

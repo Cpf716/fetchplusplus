@@ -1,3 +1,10 @@
+//
+//  fpp_client.h
+//  fetch-json
+//
+//  Created by Corey Ferguson on 7/10/26.
+//
+
 #ifndef fpp_client_h
 #define fpp_client_h
 

@@ -1,5 +1,9 @@
-// Class cpp17_latch mimics the builtin C++20 class
-// It can be used to block the main thread until all asynchronous requests are complete
+//
+//  cpp17_latch.cpp
+//  fetch-json
+//
+//  Created by Corey Ferguson on 7/9/26.
+//
 
 #include "cpp17_latch.h"
 
@@ -22,7 +26,7 @@ void cpp17_latch::count_down() {
 void cpp17_latch::wait() {
     std::unique_lock<std::mutex> lock(this->_mutex);
 
-    this->_cv.wait(lock, [this]() {
+    this->_cv.wait(lock, [this] {
         return this->_count.load() == 0;
     });
 }

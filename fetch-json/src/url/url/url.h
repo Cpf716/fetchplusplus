@@ -9,7 +9,6 @@
 #define url_h
 
 #include "util.h"
-#include <map>
 
 struct url {
     // Typdef

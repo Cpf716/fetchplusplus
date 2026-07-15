@@ -24,9 +24,9 @@ paths:
                 - required:
                     - firstName
                 - required:
-                    - fullName
-                - required:
                     - lastName
+                - required:
+                  - nickname
               properties:
                 firstName:
                   type: string

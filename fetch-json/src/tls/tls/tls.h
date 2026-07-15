@@ -1,6 +1,14 @@
+//
+//  tls.h
+//  fetch-json
+//
+//  Created by Corey Ferguson on 7/10/26.
+//
+
 #ifndef tls_h
 #define tls_h
 
+#include "debug.h"
 #include "dns.h"
 #include "fpp_client.h"
 #include "logger.h"

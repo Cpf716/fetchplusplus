@@ -20,7 +20,7 @@ namespace mysocket {
 
         buff[len] = '\0';
         
-        return trim_end(std::string(buff));
+        return std::string(buff);
     }
 
     int _send(const int file_descriptor, const std::string message) {
@@ -105,7 +105,7 @@ namespace mysocket {
             throw mysocket::error(errno);
         }
         
-        this->_listener = std::thread([&]{
+        this->_listener = std::thread([this] {
             while (true) {
                 if (this->_shut_down.load())
                     return;

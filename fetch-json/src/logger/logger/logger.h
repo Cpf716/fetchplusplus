@@ -12,28 +12,32 @@
 
 // Typedef
 
-enum logging { NONE, INFO, EXTENDED };
+enum logging { LOG_NONE, LOG_SOME, LOG_MORE, LOG_MORE_TLS };
 
 class logger {
     // Member Fields
 
-    logging _logging;
+    logging _level = LOG_SOME;
+
+    // Member Functions
+
+    void log(const logging level, const std::string message);
 public:
     // Constructors
 
     logger();
 
-    logger(const enum logging logging);
+    logger(const logging level);
 
     // Member Functions
 
-    void          error(const std::string message);
+    void     error(const std::string message);
 
-    void          extended(const std::string message);
+    logging& level();
 
-    void          info(const std::string message);
+    void     more(const std::string message);
 
-    enum logging& logging();
+    void     some(const std::string message);
 };
 
 // Non-Member Functions

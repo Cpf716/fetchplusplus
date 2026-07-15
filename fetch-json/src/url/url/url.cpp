@@ -258,12 +258,11 @@ std::string url::query_string::str() {
     std::ostringstream ss;
 
     if (this->params().size()) {
-        size_t     index = 0;
         param::map params = this->params();
 
         auto it = params.begin();
 
-        for (; index < params.size() - 1; index++, it++)
+        for (int i = 0; i < params.size() - 1; i++, it++)
             for (std::string value: (* it).second.list())
                 ss << (* it).first << "=" << value << "&";
 
