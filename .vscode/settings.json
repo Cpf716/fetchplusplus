@@ -60,6 +60,8 @@
         "csignal": "cpp",
         "cassert": "cpp",
         "iterator": "cpp",
-        "span": "cpp"
-    }
+        "span": "cpp",
+    },
+    "prettier.enable": false,
+    "editor.formatOnSave": false
 }

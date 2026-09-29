@@ -12,7 +12,7 @@
 
 // Typedef
 
-enum logging { LOG_NONE, LOG_SOME, LOG_MORE };
+enum logging { LOG_NONE, LOG_SOME, LOG_MORE, LOG_MOST };
 
 class logger {
     // Member Fields

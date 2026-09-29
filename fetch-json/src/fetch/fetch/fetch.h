@@ -8,8 +8,12 @@
 #ifndef fetch_h
 #define fetch_h
 
+#define FPP_VERSION 0.1
+
+#include "json.h"
 #include "socket.h"
 #include "tls.h"
+#include "xml.h"
 
 namespace fetch {
     // Typedef
@@ -103,7 +107,23 @@ namespace fetch {
         using map = header::map;
     };
 
-    struct abstract_response {
+    class response {
+        // Member Fields
+
+        header::map   _headers;
+        status_code   _status;
+        std::string   _status_text;
+        std::string   _text;
+        trailer::map  _trailers;
+    public:
+        // Constructors
+
+        response();
+
+        response(const status_code status, const std::string status_text, const std::string text);
+
+        response(const status_code status, const std::string status_text, header::map headers = {}, const std::string text = "", trailer::map trailers = {});
+
         // Member Functions
 
         /**
@@ -112,6 +132,8 @@ namespace fetch {
         header       get(const std::string key);
 
         header::map  headers();
+
+        json::object* json();
 
         bool         ok() const;
 
@@ -122,17 +144,11 @@ namespace fetch {
         std::string  text() const;
 
         trailer::map trailers();
-    protected:
-        // Member Fields
-        
-        header::map   _headers;
-        status_code   _status;
-        std::string   _status_text;
-        std::string   _text;
-        trailer::map  _trailers;
+
+        xml::element* xml();
     };
 
-    class error: public std::exception, public abstract_response {
+    class error: public std::exception, public response {
         // Member Fields
 
         std::string _what;
@@ -144,16 +160,6 @@ namespace fetch {
         // Member Functions
 
         const char* what() const throw();
-    };
-
-    struct response: public abstract_response {
-        // Constructors
-
-        response();
-
-        response(const status_code status, const std::string status_text, const std::string text);
-
-        response(const status_code status, const std::string status_text, header::map headers = {}, const std::string text = "", trailer::map trailers = {});
     };
 
     class http_client {
@@ -200,24 +206,22 @@ namespace fetch {
 
             // Constructors
 
+            pool(class logger* logger);
+
             ~pool();
 
             // Member Functions
 
             size_t           close(const std::string host);
-            
-            void             config(const std::string host, std::function<void(connection*)> cb);
 
             fpp::fpp_client* get_connection(const std::string host, class url url);
         
-            void             release(const std::string host, class url url);
-
-            void             set_logging(const logging level);
+            void             release(const std::string host, class url url, std::function<void(connection*)> cb);
         private:
             // Member Fields
 
             connection::map          _connections;
-            logger                   _logger;
+            logger*                  _logger = NULL;
             std::mutex               _mutex;
             std::atomic<bool>        _shut_down = false;
             std::vector<std::thread> _threads;
@@ -250,20 +254,22 @@ namespace fetch {
         
         // Member Fields
 
-        logger                   _logger;
+        logger*                  _logger = NULL;
         int                      _max_redirects = 20;
-        pool                     _pool;
+        std::unique_ptr<pool>    _pool;
         std::vector<std::thread> _threads;
         int                      _timeout = 30;
 
         // Member Functions
 
-        response _parse_response(fpp::fpp_client* client, const std::string data);
+        response _parse_response(fpp::fpp_client* client, const std::string method, const std::string data);
         
         response _request(header::map& headers, const std::string url, const std::string method, const std::string body, const size_t redirects, const size_t max_redirects);
     public:
 
         // Constructors
+
+        http_client(class logger* logger = new class logger());
 
         ~http_client();
 
@@ -274,6 +280,16 @@ namespace fetch {
         void     get(header::map& headers, const std::string url, std::function<void(response, fetch::error)> cb);
         
         response head(header::map& headers, const std::string url, const std::string body = "");
+
+        void     head(header::map& headers, const std::string url, const std::string body, std::function<void(response, fetch::error)> cb);
+
+        response head(header::map& headers, const std::string url, json::object* body);
+
+        void     head(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb);
+
+        response head(header::map& headers, const std::string url, xml::element* body);
+
+        void     head(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb);
         
         int&     max_redirects();
         
@@ -282,16 +298,30 @@ namespace fetch {
         response post(header::map& headers, const std::string url, const std::string body);
 
         void     post(header::map& headers, const std::string url, const std::string body, std::function<void(response, fetch::error)> cb);
+
+        response post(header::map& headers, const std::string url, json::object* body);
+
+        void     post(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb);
+
+        response post(header::map& headers, const std::string url, xml::element* body);
+
+        void     post(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb);
         
         response put(header::map& headers, const std::string url, const std::string body);
 
         void     put(header::map& headers, const std::string url, const std::string body, std::function<void(response, fetch::error)> cb);
 
+        response put(header::map& headers, const std::string url, json::object* body);
+
+        void     put(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb);
+
+        response put(header::map& headers, const std::string url, xml::element* body);
+
+        void     put(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb);
+
         response request(header::map& headers, const std::string url, const std::string method = "get", const std::string body = "");
 
         void     request(header::map& headers, const std::string url, const std::string method, const std::string body, std::function<void(response, fetch::error)> cb);
-
-        void     set_logging(const logging level);
         
         int&     timeout();
     };

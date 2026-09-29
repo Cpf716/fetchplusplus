@@ -115,7 +115,7 @@ std::string                        trim_end(const std::string string);
 std::string                        trim_start(const std::string string);
 
 // Return floating-point number formatted to min precision
-std::string                        truncate(const double number, const int min_prec = 0);
+std::string                        truncate_d(const double number, const int min_prec = 0);
 
 /**
  * Unescape double quotation-escaped string

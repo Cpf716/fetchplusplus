@@ -60,7 +60,7 @@ namespace tls {
 
     std::string ca_path();
 
-    void        set_logging(logging value);
+    void        logger(class logger* value);
 }
 
 #endif /* tls_h */

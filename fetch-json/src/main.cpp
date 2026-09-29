@@ -6,26 +6,32 @@
 //
 
 #include "fetch.h"
-#include "xml.h"
 
 using namespace fetch;
 using namespace std;
 
-// Non-Member Fields
-
-http_client http;
-
 // Non-Member Functions
 
-logging parse_logging(const std::string value) {
-    int index = ((map<string, int>) {
-        { "none", 1 },
-        { "some", 2 },
-        { "more", 3 },
-    })[tolowerstr(value)] - 1;
+logging parse_logging(map<string, string> options)
+{
+    auto it = options.find("-l");
 
-    if (index == -1) {
-        cout << "Option '" + value + "' not recognized\n";
+    if (it == options.end())
+        it = options.find("--log");
+
+    if (it == options.end())
+        return LOG_SOME;
+
+    int index = ((map<string, int>){
+                    {"none", 1},
+                    {"some", 2},
+                    {"more", 3},
+                    {"most", 4}})[tolowerstr((*it).second)] -
+                1;
+
+    if (index == -1)
+    {
+        cout << "Option not found: " << (*it).second << endl;
 
         return LOG_SOME;
     }
@@ -33,46 +39,57 @@ logging parse_logging(const std::string value) {
     return static_cast<enum logging>(index);
 }
 
-void set_logging(map<string, string> options) {
-    auto it = options.find("-l");
+int main(int argc, const char *argv[])
+{
+    logging level = parse_logging(
+        options(argc, argv));
 
-    if (it == options.end())
-        it = options.find("--log");
+    class logger logger(level);
 
-    http.set_logging(
-        it == options.end() ?
-            LOG_SOME :
-            parse_logging((* it).second)
-    );
-}
-
-int main(int argc, const char* argv[]) {
-    map<string, string> opts = options(argc, argv);
-
-    set_logging(opts);
-
-    http.timeout() = 60;
+    http_client http(&logger);
 
     header::map headers;
 
-    try {
-        cout << "Fetching all vehicle makes from the NHTSA...\n";
+    cout << "Fetching all vehicle makes from the NHTSA...\n";
 
-        class url url("https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes");
+    class url url("https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes");
 
-        url.params()["format"] = string("xml");
+    url.params()["format"] = string("xml");
 
+    try
+    {
+        http.options(headers, url.str());
+    }
+    catch (fetch::error &e)
+    {
+        cerr << e.what() << endl;
+    }
+
+    try
+    {
         auto response = http.get(headers, url.str());
 
-        std::chrono::time_point start = std::chrono::steady_clock::now();
+        auto start = std::chrono::steady_clock::now();
 
-        auto xml = xml::parse(response.text());
+        unique_ptr<xml::element> xml_ptr(response.xml());
 
-        cout << xml->find("Results")->str() << endl;
+        auto results = xml_ptr.get()->find("Results");
 
+        for (auto make : results->children())
+        {
+            string make_name = make->find("Make_Name")->strin();
+
+            cout << xml::unescape(make_name);
+        }
+
+        cout << endl;
         cout << (std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
-            .count() * 1000) << " ms\n";
-    } catch (fetch::error& e) {
+                     .count() *
+                 1000)
+             << " ms\n";
+    }
+    catch (fetch::error &e)
+    {
         throw e;
     }
 }
