@@ -1,7 +1,7 @@
 // Author:  Corey Ferguson
 // Date:    2025 September 2
 // File:    request.service.js
-// Project: fetch-json
+// Project: fetchplusplus
 //
 
 const { LoggerService } = require('./logger.service');

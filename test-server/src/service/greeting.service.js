@@ -1,7 +1,7 @@
 // Author:  Corey Ferguson
 // Date:    2025 September 2
 // File:    greeting.service.js
-// Project: fetch-json
+// Project: fetchplusplus
 //
 // Non-Member Fields
 class GreetingService {

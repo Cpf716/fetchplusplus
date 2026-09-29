@@ -1,0 +1,9 @@
+cd /Users/YOUR_USER/fetchplusplus
+
+xcodebuild -configuration Debug -scheme fetchplusplus
+
+# In a new tab...
+
+cd /Users/YOUR_USER/Library/Developer/Xcode/DerivedData/fetchplusplus-YOUR_RANDOM_ID/Build/Products/Debug
+
+./fetchplusplus
