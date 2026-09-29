@@ -10,7 +10,7 @@
 namespace tls {
     // Non-Member Fields
 
-    class logger _logger;
+    class logger* m_logger = NULL;
 
     // Non-Member Functions
 
@@ -18,8 +18,8 @@ namespace tls {
         return "/etc/ssl/cert.pem";
     }
 
-    void set_logging(logging value) {
-        _logger.level() = value;
+    void logger(class logger* value) {
+        m_logger = value;
     }
 
     error::error(const std::string what) : fpp::error(what) { }
@@ -39,14 +39,14 @@ namespace tls {
         // 1: Error
         mbedtls_debug_set_threshold(1);
 
-        if (_logger.level() == LOG_MORE) {
+        if (m_logger != NULL && m_logger->level() == LOG_MOST) {
             // 2: State Change
             mbedtls_debug_set_threshold(2);
         }
 
         // Define TLS logger callback
         mbedtls_ssl_conf_dbg(&conf, [](void* ctx, int level, const char* file, int line, const char* str) {
-            _logger.more(trim_end(str));
+            if (m_logger != NULL) m_logger->more(trim_end(str));
         }, NULL);
 
         // Initialize seed for the RNG
@@ -126,7 +126,7 @@ namespace tls {
                 if (!(errnum == MBEDTLS_ERR_SSL_WANT_READ || errnum == MBEDTLS_ERR_SSL_WANT_WRITE))
                     throw tls::error("SSL handshake failed");
 
-            _logger.more("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
+            if (m_logger != NULL) m_logger->more("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
         } catch (dns::error& e) {
             throw tls::error(e.what());
         }

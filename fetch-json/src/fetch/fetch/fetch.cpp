@@ -16,14 +16,10 @@ namespace fetch {
         this->_value = value;
     }
 
-    error::error(const status_code status, const std::string status_text, const std::string text, header::map headers, trailer::map trailers) {
-        this->_status = status;
-        this->_status_text = status_text;
-        this->_text = text;
-        this->_what = this->text().empty() ? this->status_text() : this->text();
-        this->_headers = headers;
-        this->_trailers = trailers;
-    }
+    error::error(const status_code status, const std::string status_text, const std::string text, header::map headers, trailer::map trailers) :
+        response(status, status_text, headers, text, trailers) {
+            this->_what = this->text().empty() ? this->status_text() : this->text();
+        }
 
     header::header() {
         this->_set("");
@@ -94,7 +90,7 @@ namespace fetch {
             if (it == headers.end())
                 headers.try_emplace("accept", "*/*");
             
-            headers["user-agent"] = std::string("fetch++/0.0");
+            headers["user-agent"] = "fetch++/" + truncate_d(FPP_VERSION, 1);
 
             // Map to hyphenated Pascal case
             for (const auto& [key, value]: headers) {
@@ -137,10 +133,19 @@ namespace fetch {
         this->_trailers = trailers;
     }
 
+    http_client::http_client(class logger* logger) {
+        this->_logger = logger;
+        this->_pool = std::make_unique<pool>(logger);
+    }
+
     http_client::~http_client() {
         for (size_t i = 0; i < this->_threads.size(); i++)
             if (this->_threads[i].joinable())
                 this->_threads[i].join();
+    }
+
+    http_client::pool::pool(class logger* logger) {
+        this->_logger = logger;
     }
 
     http_client::pool::~pool() {
@@ -221,7 +226,7 @@ namespace fetch {
         return res;
     }
 
-    response http_client::_parse_response(fpp::fpp_client* client, const std::string data) {
+    response http_client::_parse_response(fpp::fpp_client* client, const std::string method, const std::string data) {
         // Begin - Parse response
         std::istringstream iss(data);
         std::string        line;
@@ -253,86 +258,86 @@ namespace fetch {
             // Case-insensitive
             headers.try_emplace(tolowerstr(header[0]), trim(line.substr(header[0].length() + 1)));
         }
-        
-        // Parse response body
-        auto it = headers.find("content-length");
 
-        std::ostringstream oss;
-
-        oss << iss.rdbuf();
-        
-        std::string  text = oss.str();
+        std::string  text;
         trailer::map trailers;
 
-        if (it == headers.end()) {
-            it = headers.find("transfer-encoding");
+        if (tolowerstr(method) != "head") {
+            // Parse response body
+            auto it = headers.find("content-length");
 
-            if (it != headers.end() && (* it).second.str() == "chunked") {
-                int size_rem = 0;
-                
-                std::vector<std::string> chunks;
+            std::ostringstream oss;
 
-                // The first packet will invariably start with chunk size
-                // Subsequent packets may start w/ chunk size or at any point throughout the chunk
-                auto read = [&size_rem, &chunks](std::string text) {
-                    for (std::string line: split(text, "\r\n")) {
-                        if (line.empty())
-                            continue;
+            oss << iss.rdbuf();
+            text = oss.str();
 
-                        if (size_rem == 0) {
-                            // Find terminating character (0)
-                            if ((size_rem = decimal(split(line, ";")[0])) == 0)
-                                return false;
+            if (it == headers.end()) {
+                it = headers.find("transfer-encoding");
 
-                            continue;
+                if (it != headers.end() && (* it).second.str() == "chunked") {
+                    int size_rem = 0;
+                    
+                    std::vector<std::string> chunks;
+
+                    // The first packet will invariably start with chunk size
+                    // Subsequent packets may start w/ chunk size or at any point throughout the chunk
+                    auto read = [&size_rem, &chunks](std::string text) {
+                        for (std::string line: split(text, "\r\n")) {
+                            if (line.empty())
+                                continue;
+
+                            if (size_rem == 0) {
+                                // Find terminating character (0)
+                                if ((size_rem = decimal(split(line, ";")[0])) == 0)
+                                    return false;
+
+                                continue;
+                            }
+
+                            chunks.push_back(line);
+
+                            size_rem -= line.length();
                         }
 
-                        chunks.push_back(line);
+                        return true;
+                    };
 
-                        size_rem -= line.length();
+                    if (read(text)) {
+                        while (true) {
+                            std::string response = client->recv();
+
+                            this->_logger->more(response);
+                            
+                            if (!read(response))
+                                break;
+                        }
                     }
 
-                    return true;
-                };
+                    text = join(chunks, "");
 
-                if (read(text)) {
-                    while (true) {
-                        std::string response = client->recv();
+                    // Parse trailers
+                    while (getline(iss, line)) {
+                        std::vector<std::string> trailer = split(line, ":");
 
-                        this->_logger.more(response);
-                        
-                        if (!read(response))
+                        if (trailer.size() == 1)
                             break;
+
+                        trailers.try_emplace(tolowerstr(trailer[0]), trim(line.substr(trailer[0].length() + 1)));
                     }
                 }
+            } else {
+                text.reserve((* it).second.int_value());
 
-                text = join(chunks, "");
+                // Fetch additional packets as required
+                while (text.length() < (* it).second.int_value()) {
+                    std::string response = client->recv();
 
-                // Parse trailers
-                while (getline(iss, line)) {
-                    std::vector<std::string> trailer = split(line, ":");
+                    this->_logger->more(response);
 
-                    if (trailer.size() == 1)
-                        break;
-
-                    trailers.try_emplace(tolowerstr(trailer[0]), trim(line.substr(trailer[0].length() + 1)));
+                    text.append(response);
                 }
-            }
-        } else {
-            text.reserve((* it).second.int_value());
-
-            // Fetch additional packets as required
-            while (text.length() < (* it).second.int_value()) {
-                std::string response = client->recv();
-
-                this->_logger.more(response);
-
-                text.append(response);
-            }
+            }   
         }
-
-        if (status < 200 || status >= 400)
-            throw fetch::error(static_cast<status_code>(status), status_text, text, headers, trailers);
 
         return response(static_cast<status_code>(status), status_text, headers, text, trailers);
     }
@@ -368,31 +373,31 @@ namespace fetch {
 
     // Member Functions
 
-    header abstract_response::get(const std::string key) {
+    header response::get(const std::string key) {
         return this->_headers[key];
     }
 
-    header::map abstract_response::headers() {
+    header::map response::headers() {
         return this->_headers;
     }
 
-    bool abstract_response::ok() const {
+    bool response::ok() const {
         return this->status() >= 200 && this->status() < 400;
     }
 
-    status_code abstract_response::status() const {
+    status_code response::status() const {
         return this->_status;
     }
 
-    std::string abstract_response::status_text() const {
+    std::string response::status_text() const {
         return this->_status_text;
     }
 
-    std::string abstract_response::text() const {
+    std::string response::text() const {
         return this->_text;
     }
 
-    trailer::map abstract_response::trailers() {
+    trailer::map response::trailers() {
         return this->_trailers;
     }
 
@@ -470,9 +475,9 @@ namespace fetch {
         std::chrono::time_point start = std::chrono::steady_clock::now();
 
         try {
-            fpp::fpp_client* client = this->_pool.get_connection(host, url_obj);
+            fpp::fpp_client* client = this->_pool.get()->get_connection(host, url_obj);
             
-            this->_logger.more(request.message());
+            this->_logger->more(request.message());
 
             try {
                 client->send(request.message());
@@ -490,7 +495,7 @@ namespace fetch {
                     recved->store(true);
 
                     // Sever connection
-                    this->_pool.close(host);
+                    this->_pool.get()->close(host);
                 }, recved));
                 
                 // Fetch first packet from the server
@@ -503,10 +508,10 @@ namespace fetch {
                     throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR));
                 }
 
-                this->_logger.more(response);
+                this->_logger->more(response);
 
-                // Subsequent packets are fetched as required
-                class response response_obj = _parse_response(client, response);
+                // Fetch subsequent packets
+                class response response_obj = _parse_response(client, method, response);
 
                 recved->store(true);
 
@@ -515,8 +520,8 @@ namespace fetch {
                 auto try_keep_alive = [response_headers, host, this, url_obj] {
                     auto it = response_headers.find("connection");
 
-                    if (it == response_headers.end() && (* it).second.str() != "keep-alive")
-                        this->_pool.close(host);
+                    if (it == response_headers.end() || (* it).second.str() != "keep-alive")
+                        this->_pool.get()->close(host);
                     else {
                         auto it = response_headers.find("keep-alive");
                         int  timeout;
@@ -535,7 +540,7 @@ namespace fetch {
                                 timeout = 5;
                         }
                         
-                        this->_pool.config(host, [timeout, &keep_alive](pool::connection* connection) {
+                        this->_pool.get()->release(host, url_obj, [timeout, &keep_alive](pool::connection* connection) {
                             connection->timeout() = timeout;
 
                             int max = floor(keep_alive["max"].number());
@@ -543,17 +548,37 @@ namespace fetch {
                             if (max >= 1)
                                 connection->max() = max;
                         });
-                        this->_pool.release(host, url_obj);
                     }
+                };
+
+                auto benchmark = [this, start]() {
+                    this->_logger->more(
+                        std::to_string(
+                            std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+                                .count() * 1000
+                        ) + " ms\n"
+                    );
                 };
 
                 // Keep connection alive, if supported
                 if (response_obj.text().length()) {
                     // Response is non-empty but has no content-length; disconnect immediately
                     if (response_headers.find("content-length") == response_headers.end())
-                        this->_pool.close(host);
+                        this->_pool.get()->close(host);
                     else try_keep_alive();
                 } else try_keep_alive();
+
+                if (!response_obj.ok()) {
+                    benchmark();
+
+                    throw fetch::error(
+                        response_obj.status(),
+                        response_obj.status_text(),
+                        response_obj.text(),
+                        response_obj.headers(),
+                        response_obj.trailers()
+                    );
+                }
                 
                 // Redirect
                 if (response_obj.status() >= 300 && response_obj.status() < 400) {
@@ -567,25 +592,22 @@ namespace fetch {
                         if (request.url().params().size())
                             location += "?" + request.url().query();
 
-                        this->_logger.some("Redirecting to " + location);
+                        this->_logger->some("Redirecting to " + location);
+
+                        benchmark();
 
                         return _request(headers, location, method, body, redirects + 1, max_redirects);
                     }
                 }
 
-                this->_logger.more(
-                    std::to_string(
-                        std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
-                            .count() * 1000
-                    ) + " ms\n"
-                );
+                benchmark();
 
                 return response_obj;
             } catch (fpp::error& e) {
                 if (recved->load())
                     throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), "Connection timed out");
 
-                this->_pool.close(host);
+                this->_pool.get()->close(host);
 
                 throw e;
             }
@@ -608,6 +630,26 @@ namespace fetch {
         return this->request(headers, url, "head", body);
     }
 
+    void http_client::head(header::map& headers, const std::string url, const std::string body, std::function<void(response, fetch::error)> cb) {
+        this->request(headers, url, "head", body, cb);
+    }
+
+    response http_client::head(header::map& headers, const std::string url, json::object* body) {
+        return this->head(headers, url, json::stringify(body));
+    }
+
+    void http_client::head(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
+        this->head(headers, url, json::stringify(body), cb);
+    }
+
+    response http_client::head(header::map& headers, const std::string url, xml::element* body) {
+        return this->head(headers, url, body->str());
+    }
+
+    void http_client::head(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb) {
+        this->head(headers, url, body->str(), cb);
+    }
+
     int& http_client::max_redirects() {
         return this->_max_redirects;
     }
@@ -624,12 +666,60 @@ namespace fetch {
         this->request(headers, url, "post", body, cb);
     }
 
+    response http_client::post(header::map& headers, const std::string url, json::object* body) {
+        headers["content-type"] = std::string("application/json");
+
+        return this->post(headers, url, json::stringify(body));
+    }
+
+    void http_client::post(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
+        headers["content-type"] = std::string("application/json");
+
+        this->post(headers, url, json::stringify(body), cb);
+    }
+
+    response http_client::post(header::map& headers, const std::string url, xml::element* body) {
+        headers["content-type"] = std::string("application/xml");
+
+        return this->post(headers, url, body->str());
+    }
+
+    void http_client::post(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb) {
+        headers["content-type"] = std::string("application/xml");
+
+        this->post(headers, url, body->str(), cb);
+    }
+
     response http_client::put(header::map& headers, const std::string url, const std::string body) {
         return this->request(headers, url, "put", body);
     }
 
     void http_client::put(header::map& headers, const std::string url, const std::string body, std::function<void(response, fetch::error)> cb) {
         this->request(headers, url, "put", body, cb);
+    }
+
+    response http_client::put(header::map& headers, const std::string url, json::object* body) {
+        headers["content-type"] = std::string("application/json");
+
+        return this->put(headers, url, json::stringify(body));
+    }
+
+    void http_client::put(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
+        headers["content-type"] = std::string("application/json");
+
+        this->put(headers, url, json::stringify(body), cb);
+    }
+
+    response http_client::put(header::map& headers, const std::string url, xml::element* body) {
+        headers["content-type"] = std::string("application/xml");
+
+        return this->put(headers, url, body->str());
+    }
+
+    void http_client::put(header::map& headers, const std::string url, xml::element* body, std::function<void(response, fetch::error)> cb) {
+        headers["content-type"] = std::string("application/xml");
+
+        this->put(headers, url, body->str(), cb);
     }
 
     response http_client::request(header::map& headers, const std::string url, const std::string method, const std::string body) {
@@ -656,7 +746,7 @@ namespace fetch {
         (* it).second.value()->close();
             
         this->_connections.erase(it);
-        this->_logger.more("");
+        this->_logger->more("");
 
         return 0;
     }
@@ -664,14 +754,6 @@ namespace fetch {
     size_t http_client::pool::close(const std::string host) {
         return _lock(this->_mutex, [this, host] {
             return this->_close(host);
-        });
-    }
-
-    void http_client::pool::config(const std::string host, std::function<void(connection*)> cb) {
-        _lock(this->_mutex, [cb, this, host] {
-            cb(&this->_connections[host]);
-            
-            return 0;
         });
     }
 
@@ -722,7 +804,7 @@ namespace fetch {
         // Connection not found or unavailable; create new connection
         if (connection == NULL) {
             if (url.protocol() == "https") {
-                tls::set_logging(this->_logger.level());
+                tls::logger(this->_logger);
                 
                 try {
                     // TLS "client hello" requires fully-qualified hostname; therefore, DNS resolution is performed internally
@@ -738,7 +820,7 @@ namespace fetch {
                     try {
                         connection = new mysocket::tcp_client(hosts[0].ip(), url.port());
                         
-                        this->_logger.more("* Connected to " + url.host() + "(" + hosts[0].ip() + ") port " + std::to_string(url.port()));
+                        this->_logger->more("* Connected to " + url.host() + "(" + hosts[0].ip() + ") port " + std::to_string(url.port()));
                     } catch (mysocket::error& e) {
                         throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
                     }
@@ -756,30 +838,32 @@ namespace fetch {
                 return this->_connections.try_emplace(host, pool::connection(connection));
             });
         } else
-            this->_logger.more("* Getting pooled connection for host " + url.host());
+            this->_logger->more("* Getting pooled connection for host " + url.host());
 
         return connection;
     }
 
-    void http_client::pool::release(const std::string host, class url url) {
+    void http_client::pool::release(const std::string host, class url url, std::function<void(connection*)> cb) {
         size_t number,
                 timeout;
 
-        if (_lock(this->_mutex, [this, host, &number, &timeout] {
+        if (_lock(this->_mutex, [this, cb, host, &number, &timeout] {
             pool::connection* connection = &this->_connections[host];
 
-            if (connection->number() == connection->max())
+            cb(connection);
+
+            if (connection->number() + 1 == connection->max())
                 return this->_close(host);
 
             connection->released() = true;
-            number = connection->number()++;
+            number = ++connection->number();
             
             return timeout = connection->timeout();
         }) == 0)
             return;
 
         this->_threads.push_back(std::thread([timeout, this, host, number](std::string fully_qualified_host) {
-            this->_logger.more("* Connection to host " + fully_qualified_host + " left intact");
+            this->_logger->more("* Connection to host " + fully_qualified_host + " left intact");
             
             for (size_t i = 0; i < timeout * 10 && !this->_shut_down.load(); i++)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -787,7 +871,7 @@ namespace fetch {
             _lock(this->_mutex, [this, host, number] {
                 pool::connection* connection = &this->_connections[host];
 
-                if (connection->number() == number + 1)
+                if (connection->number() == number)
                     return this->_close(host);
 
                 return (size_t) 0;
@@ -803,12 +887,23 @@ namespace fetch {
         return this->_url;
     }
 
-    void http_client::set_logging(const logging level) {
-        this->_logger.level() = level;
-        this->_pool.set_logging(level);
+    json::object* response::json() {
+        auto it = this->_headers.find("content-type");
+
+        if (it == this->_headers.end() || !starts_with((* it).second, "application/json"))
+            throw json::error("Response is not JSON");
+
+        return json::parse(this->text());
     }
 
-    void http_client::pool::set_logging(const logging level) {
-        this->_logger.level() = level;
+    xml::element* response::xml() {
+        auto it = this->_headers.find("content-type");
+
+        if (it == this->_headers.end() ||
+            !(starts_with((* it).second, "application/xml") ||
+            starts_with((* it).second, "text/xml")))
+                throw xml::error("Response is not XML");
+
+        return xml::parse(this->text());
     }
 }

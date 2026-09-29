@@ -51,6 +51,8 @@ std::vector<int> digits(const double number) {
         whole /= 10;
     }
 
+    if (result.empty()) result.push_back(0);
+
     result.insert(result.begin(), INT_MAX);
 
     double part = number;
@@ -639,7 +641,7 @@ std::string trim_start(const std::string string) {
     return string.substr(start);
 }
 
-std::string truncate(const double number, const int min_prec) {
+std::string truncate_d(const double number, const int min_prec) {
     std::vector<int> d = digits(number);
 
     int i = (int) d.size() - 1;

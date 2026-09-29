@@ -78,7 +78,7 @@ namespace xml {
         element();
 
         // Instantiate element of type XML_ELEMENT_TYPE; leave name empty for root
-        element(const std::string name);
+        element(const std::string name, const bool xd = true);
 
         ~element();
 
@@ -89,8 +89,9 @@ namespace xml {
         
         std::unordered_map<std::string, std::string>& attributes();
 
-        // Return a read-only copy of element's children
-        std::vector<element*>                         children();
+        // Return element's children
+        // DO NOT MODIFY DIRECTLY
+        std::vector<element*>&                        children();
 
         // Return document type directive
         document_type&                                dtd();
@@ -121,7 +122,11 @@ namespace xml {
         // Remove oneself from parent
         void                                          remove();
 
+        // Return serialized element
         std::string                                   str();
+
+        // Return serialized children of element
+        std::string                                   strin();
 
         // Return element text
         std::string                                   text() const;

@@ -10,7 +10,7 @@
 namespace xml {
     // Non-Member Fields
 
-    static const std::map<char, std::string> escape_map = {
+    static const std::unordered_map<char, std::string> escape_map = {
         { '&', "&amp;"},
         { '<', "&lt;" },
         { '>', "&gt;" },
@@ -73,8 +73,8 @@ namespace xml {
     }
 
     element* parse(element* target, const std::string_view source, const int start, const int end) {
-        auto handle_error = [](std::string what) {
-            return error("Error: " + what);
+        auto error = [](std::string what) {
+            return xml::error("Error: " + what);
         };
 
         int i = start;
@@ -110,7 +110,7 @@ namespace xml {
                 }
 
                 if (j == end)
-                    throw handle_error("Unexpected end of XML input");
+                    throw error("Unexpected end of XML input");
 
                 // Step 3. Check if element is self-closing
                 int k;
@@ -126,7 +126,7 @@ namespace xml {
 
                 if (k != j) {
                     if (k != j - 1)
-                       throw handle_error("Unexpected token / in XML input");
+                       throw error("Unexpected token / in XML input");
 
                     self_closing = true;
                 } else self_closing = false;
@@ -147,14 +147,14 @@ namespace xml {
                         l++;
 
                     if (l != attributes.size() - 1)
-                        throw handle_error("Unexpected token -- in XML input");
+                        throw error("Unexpected token -- in XML input");
                     // Parse document type declaration
                 } else if (attributes[0] == "!DOCTYPE") {
                     if (attributes.size() <= 1)
-                        throw handle_error("Unexpected end of XML input");
+                        throw error("Unexpected end of XML input");
 
                     if (target->parent() != NULL && target->parent()->children().size() >= 2)
-                        throw handle_error("Document type declaration must occur before content");
+                        throw error("Document type declaration must occur before content");
                     
                     target->dtd().name() = attributes[1];
 
@@ -166,7 +166,7 @@ namespace xml {
                     // Parse XML directive 
                 } else if (attributes[0] == "?xml") {
                     if (attributes.size() == 1)
-                        throw handle_error("Unexpected end of XML input");
+                        throw error("Unexpected end of XML input");
 
                     std::unordered_map<std::string, std::string> xd;
 
@@ -174,7 +174,7 @@ namespace xml {
                         std::vector<std::string_view> attribute = split(attributes[l], "=");
                         
                         if (attribute.size() > 2)
-                            throw handle_error("Unexpected token = in XML input");
+                            throw error("Unexpected token = in XML input");
 
                         xd[std::string(attribute[0])] = attribute.size() == 1 ? "" : std::string(attribute[1]);
                     }
@@ -182,18 +182,18 @@ namespace xml {
                     std::vector<std::string_view> tokens = split(attributes[attributes.size() - 1], "?");
 
                     if (tokens.size() != 2)
-                        throw handle_error("Unexpected end of XML input");
+                        throw error("Unexpected end of XML input");
 
                     if (tokens[1].length())
-                        throw handle_error("Unexpected token " + std::string((char[]) { tokens[1][0], '\0' }) + " in XML input");
+                        throw error("Unexpected token " + std::string((char[]) { tokens[1][0], '\0' }) + " in XML input");
                     
                     if (target->parent() != NULL && target->parent()->children().size())
-                        throw handle_error("XML declaration must occur before DTD and content");
+                        throw error("XML declaration must occur before DTD and content");
 
                     std::vector<std::string_view> attribute = split(tokens[0], "=");
 
                     if (attribute.size() > 2)
-                        throw handle_error("Unexpected token = in XML input");
+                        throw error("Unexpected token = in XML input");
 
                     xd[std::string(attribute[0])] = attribute.size() == 1 ? "" : ::unescape(std::string(attribute[1]));
 
@@ -268,7 +268,7 @@ namespace xml {
                                 }
 
                                 if (l == end)
-                                    throw handle_error("Unexpected end of XML input");
+                                    throw error("Unexpected end of XML input");
 
                                 if (source[k + 1] == '/') {
                                     // <i...j>...<k/...l>
@@ -282,7 +282,7 @@ namespace xml {
                         }
 
                         if (k == end)
-                            throw handle_error("Unexpected end of XML input");
+                            throw error("Unexpected end of XML input");
                         
                         // Parse element content
                         j != k && parse(e, source, j, k);
@@ -297,7 +297,7 @@ namespace xml {
                 i = k;
             } else {
                 if (source[i] == '>')
-                    throw handle_error("Unexpected token > in XML input");
+                    throw error("Unexpected token > in XML input");
 
                 // Embed text content
                 element* e = new element();
@@ -357,12 +357,12 @@ namespace xml {
         this->_type = XML_TEXT_TYPE;
     }
 
-    element::element(const std::string name) {
+    element::element(const std::string name, const bool xd) {
         this->_name = name;
         this->_type = XML_ELEMENT_TYPE;
 
         if (this->name().empty())
-            this->xd().display() = true;
+            this->xd().display() = xd;
     }
 
     error::error(const std::string what) {
@@ -370,7 +370,7 @@ namespace xml {
     }
 
     element::~element() {
-        for (element* child: this->_children)
+        for (element* child: this->children())
             delete child;
     }
 
@@ -399,7 +399,7 @@ namespace xml {
         return this->_attributes;
     }
 
-    std::vector<element*> element::children() {
+    std::vector<element*>& element::children() {
         return this->_children;
     }
 
@@ -423,8 +423,8 @@ namespace xml {
         if (this->name() == name)
             return this;
 
-        for (int i = 0; i < this->_children.size(); i++) {
-            element* result = this->_children[i]->find(name);
+        for (int i = 0; i < this->children().size(); i++) {
+            element* result = this->children()[i]->find(name);
 
             if (result != NULL)
                 return result;
@@ -437,8 +437,8 @@ namespace xml {
         auto it = this->attributes().find(attr_key);
 
         if (it == this->attributes().end() || (* it).second != attr_value) {
-            for (int i = 0; i < this->_children.size(); i++) {
-                element* result = this->_children[i]->find(attr_key, attr_value);
+            for (int i = 0; i < this->children().size(); i++) {
+                element* result = this->children()[i]->find(attr_key, attr_value);
 
                 if (result != NULL)
                     return result;
@@ -466,8 +466,8 @@ namespace xml {
         if (this->name() == name)
             target.push_back(this);
 
-        for (int i = 0; i < this->_children.size(); i++) {
-            element* result = this->_children[i]->find(name);
+        for (int i = 0; i < this->children().size(); i++) {
+            element* result = this->children()[i]->find(name);
 
             if (result != NULL)
                 target.push_back(result);
@@ -480,8 +480,8 @@ namespace xml {
         auto it = this->attributes().find(attr_key);
 
         if (it == this->attributes().end() || (* it).second != attr_value) {
-            for (int i = 0; i < this->_children.size(); i++) {
-                element* result = this->_children[i]->find(attr_key, attr_value);
+            for (int i = 0; i < this->children().size(); i++) {
+                element* result = this->children()[i]->find(attr_key, attr_value);
 
                 if (result != NULL)
                     target.push_back(result);
@@ -554,6 +554,20 @@ namespace xml {
         return this->_standalone;
     }
 
+    std::string element::strin() {
+        xml::element* temp = new xml::element("", false);
+
+        for (xml::element* child: this->children())
+            temp->add_child(child);
+
+        std::string result = temp->str();
+
+        for (xml::element* child: temp->children())
+            this->add_child(child);
+
+        return result;
+    }
+
     std::string element::str() {
         std::stack<element*> stack;
         std::string          result;
@@ -578,7 +592,7 @@ namespace xml {
                                     current->xd().encoding() != "UTF-8" ||
                                     current->xd().standalone()) {
                                         result += "<?xml version=\"";
-                                        result += truncate(current->xd().version(), 1);
+                                        result += truncate_d(current->xd().version(), 1);
                                         result += "\" encoding=\"";
                                         result += current->xd().encoding();
                                         result += "\"";
@@ -608,7 +622,7 @@ namespace xml {
                         return false;
                     };
 
-                    if (current->_children.empty()) {
+                    if (current->children().empty()) {
                         if (!append_headers()) {
                             result += "<";
                             result += current->name();
@@ -637,7 +651,7 @@ namespace xml {
 
                         previous = current;
                         indent--;
-                    } else if (previous == current->_children.back()) {
+                    } else if (previous == current->children().back()) {
                         if (current->name().length())
                             result.append((indent - 1) * 2, ' ');
 
@@ -678,8 +692,8 @@ namespace xml {
                             result += ">\n";
                         }
 
-                        for (int i = (int) current->_children.size(); i > 0; i--)
-                            stack.push(current->_children[i - 1]);
+                        for (int i = (int) current->children().size(); i > 0; i--)
+                            stack.push(current->children()[i - 1]);
 
                         indent++;
                     }
@@ -708,7 +722,7 @@ namespace xml {
 
     void element::text(const std::string value) {
         if (this->type() == XML_ELEMENT_TYPE) {
-            if (this->_children.size())
+            if (this->children().size())
                 throw error("Error: Text element cannot have children");
 
             this->_type = XML_TEXT_TYPE;

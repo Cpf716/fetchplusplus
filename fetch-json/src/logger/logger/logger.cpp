@@ -17,23 +17,22 @@ logger::logger(const logging level) {
 
 // Non-Member Functions
 
-void _log(const std::string message) {
+void m_log(const std::string message) {
     std::cout << message << std::endl;
 }
 
 // Member Functions
 
 void logger::error(const std::string message) {
-    _log("Error - " + message);
+    m_log("Error - " + message);
 }
 
 logging& logger::level() {
     return this->_level;
 }
 
-void logger::log(const enum logging logging, const std::string message) {
-    if (this->level() >= logging)
-        _log(message);
+void logger::log(const logging level, const std::string message) {
+    if (this->level() >= level) m_log(message);
 }
 
 void logger::more(const std::string message) {
