@@ -21,7 +21,7 @@ It combines three powerful SDKs, _fetch_, _json_, and _xml_, equipping C++ devel
 7. In the same Terminal session, execute the following command:<br><br>
 _* You will have to execute the command every time you modify the C++ code_
 ```
-xcodebuild -project fetch-json.xcodeproj -scheme fetch-json
+xcodebuild -project fetchplusplus.xcodeproj -scheme fetchplusplus
 ```
 8. Navigate back to Xcode and click Command + M to minimize the window
 
@@ -38,7 +38,7 @@ node test-server/src/index.js
 1. Navigate to the first Terminal window
 2. Execute the following command:
 ```
-./fetch-json [-l | --log] # none, some, or more
+./fetchplusplus [-l | --log] # none, some, more, or most
 ```
 
 The test server is for your convenience getting started, however Fetch++ is feature-rich, including robust transport layer security, so you can access almost any resource on the internet.
