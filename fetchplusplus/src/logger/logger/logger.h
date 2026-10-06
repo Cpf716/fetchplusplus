@@ -10,38 +10,31 @@
 
 #include <iostream>
 
-// Typedef
-
-enum logging { LOG_NONE, LOG_SOME, LOG_MORE, LOG_MOST };
-
+enum class logger_level { none, some, more, most };
 class logger {
     // Member Fields
 
-    logging _level = LOG_SOME;
-
-    // Member Functions
-
-    void log(const logging level, const std::string message);
+    logger_level _level = logger_level::some;
 public:
     // Constructors
 
     logger();
 
-    logger(const logging level);
+    logger(const logger_level level);
 
     // Member Functions
 
-    void     error(const std::string message);
+    void         always(const std::string message);
 
-    logging& level();
+    void         error(const std::string message);
 
-    void     more(const std::string message);
+    logger_level level() const;
 
-    void     some(const std::string message);
+    void         log(const logger_level level, const std::string message);
+
+    void         more(const std::string message);
+
+    void         some(const std::string message);
 };
-
-// Non-Member Functions
-
-// void _write(const std::string message);
 
 #endif /* logger_h */

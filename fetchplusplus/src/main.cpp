@@ -12,37 +12,35 @@ using namespace std;
 
 // Non-Member Functions
 
-logging parse_logging(map<string, string> options)
-{
+logger_level parse_logging(map<string, string> options) {
     auto it = options.find("-l");
 
     if (it == options.end())
         it = options.find("--log");
 
     if (it == options.end())
-        return LOG_SOME;
+        return logger_level::some;
 
-    int index = ((map<string, int>){
-                    {"none", 1},
-                    {"some", 2},
-                    {"more", 3},
-                    {"most", 4}})[tolowerstr((*it).second)] -
-                1;
+    int index = ((map<string, int>) {
+        {"none", 1},
+        {"some", 2},
+        {"more", 3},
+        {"most", 4}})
+    [tolowerstr((*it).second)] - 1;
 
-    if (index == -1)
-    {
+    if (index == -1) {
         cout << "Option not found: " << (*it).second << endl;
 
-        return LOG_SOME;
+        return logger_level::some;
     }
 
-    return static_cast<enum logging>(index);
+    return static_cast<logger_level>(index);
 }
 
-int main(int argc, const char *argv[])
-{
-    logging level = parse_logging(
-        options(argc, argv));
+int main(int argc, const char *argv[]) {
+    logger_level level = parse_logging(
+        options(argc, argv)
+    );
 
     class logger logger(level);
 
@@ -50,46 +48,42 @@ int main(int argc, const char *argv[])
 
     header::map headers;
 
-    cout << "Fetching all vehicle makes from the NHTSA...\n";
+    logger.always("Fetching all vehicle makes from the NHTSA...");
 
     class url url("https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes");
 
-    url.params()["format"] = string("xml");
+    url.params()["format"] = string("json");
 
-    try
-    {
+    try {
         http.options(headers, url.str());
-    }
-    catch (fetch::error &e)
-    {
-        cerr << e.what() << endl;
-    }
+    } catch (fetch::error &e) {
+        try {
+            unique_ptr<json::object> json_ptr(json::parse(e.what()));
 
-    try
-    {
-        auto response = http.get(headers, url.str());
+            auto message = json_ptr->get("message");
 
-        auto start = std::chrono::steady_clock::now();
-
-        unique_ptr<xml::element> xml_ptr(response.xml());
-
-        auto results = xml_ptr.get()->find("Results");
-
-        for (auto make : results->children())
-        {
-            string make_name = make->find("Make_Name")->strin();
-
-            cout << xml::unescape(make_name);
+            logger.error(::unescape(message->str()));
+        } catch (json::error& e2) {
+            logger.error(e.what());
         }
+    }
 
-        cout << endl;
-        cout << (std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
-                     .count() *
-                 1000)
-             << " ms\n";
+    auto response = http.get(headers, url.str());
+    auto start = std::chrono::steady_clock::now();
+
+    unique_ptr<json::object> json_ptr(response.json());
+
+    auto results = (json::array *)json_ptr->get("Results");
+
+    for (auto make: *results) {
+        string make_name = make->get("Make_Name")->value();
+
+        cout << ::unescape(make_name) << endl;
     }
-    catch (fetch::error &e)
-    {
-        throw e;
-    }
+
+    cout << endl;
+    cout << (std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+                .count() * 1000
+            )
+        << " ms\n";
 }

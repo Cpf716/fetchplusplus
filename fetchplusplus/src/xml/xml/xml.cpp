@@ -291,9 +291,6 @@ namespace xml {
                     }
                 }
 
-                // Parse subsequent elements
-                // k < end && parse(target, source, k, end);
-
                 i = k;
             } else {
                 if (source[i] == '>')
@@ -316,6 +313,17 @@ namespace xml {
         }
 
         return target;
+    }
+
+    element* parse(std::string text) {
+        if (text.empty())
+            throw error("Unexpected end of XML input");
+
+        element* e = new element("");
+
+        e->xd().display() = false;
+
+        return parse(e, text, 0, (int) text.length());
     }
 
     std::string unescape(const std::string value) {
@@ -354,12 +362,12 @@ namespace xml {
     // Constructors
 
     element::element() {
-        this->_type = XML_TEXT_TYPE;
+        this->_type = xml::type::text;
     }
 
     element::element(const std::string name, const bool xd) {
         this->_name = name;
-        this->_type = XML_ELEMENT_TYPE;
+        this->_type = xml::type::element;
 
         if (this->name().empty())
             this->xd().display() = xd;
@@ -377,14 +385,14 @@ namespace xml {
     // Member Functions
 
     void element::add_child(element* child) {
-        if (this->type() == XML_ELEMENT_TYPE) {
+        if (this->type() == xml::type::element) {
            if (this->parent() == NULL && this->_children.size())
                throw error("Error: Root element can only have one child");
-        }  else if (this->type() == XML_TEXT_TYPE) {
+        }  else if (this->type() == xml::type::text) {
             if (this->text().length())
                 throw error("Error: Text element cannot have children");
 
-            this->_type = XML_ELEMENT_TYPE;
+            this->_type = xml::type::element;
         }
 
         if (child->parent() != NULL)
@@ -518,7 +526,7 @@ namespace xml {
     }
 
     void element::name(const std::string name) {
-        if (this->type() == XML_TEXT_TYPE && !this->text().empty())
+        if (this->type() == xml::type::text && !this->text().empty())
             throw error("Error: Text element cannot have children");
 
         this->_name = name;
@@ -528,47 +536,7 @@ namespace xml {
         return this->_parent;
     }
 
-    element* parse(std::string text) {
-        if (text.empty())
-            throw error("Unexpected end of XML input");
-
-        element* e = new element("");
-
-        e->xd().display() = false;
-
-        return parse(e, text, 0, (int) text.length());
-    }
-
-    void element::remove() {
-        int i = 0;
-
-        while (i < this->parent()->children().size() && this->parent()->children()[i] != this)
-            i++;
-
-        this->parent()->_children.erase(this->parent()->_children.begin() + i);
-
-        this->_parent = NULL;
-    }
-
-    bool& element::preamble::standalone() {
-        return this->_standalone;
-    }
-
-    std::string element::strin() {
-        xml::element* temp = new xml::element("", false);
-
-        for (xml::element* child: this->children())
-            temp->add_child(child);
-
-        std::string result = temp->str();
-
-        for (xml::element* child: temp->children())
-            this->add_child(child);
-
-        return result;
-    }
-
-    std::string element::str() {
+    std::string element::pretty() {
         std::stack<element*> stack;
         std::string          result;
 
@@ -583,8 +551,8 @@ namespace xml {
             element* current = stack.top();
 
             switch (current->type()) {
-                case XML_ELEMENT_TYPE: {
-                    auto append_headers = [current, &result] {
+                case xml::type::element: {
+                    auto append_headers = [current, &result]{
                         if (current->name().empty()) {
                             if (current->parent() == NULL) {
                                 if (current->xd().display() ||
@@ -698,7 +666,7 @@ namespace xml {
                         indent++;
                     }
                     break;
-                } case XML_TEXT_TYPE: {
+                } case xml::type::text: {
                     result.append(indent * 2, ' ');
 
                     result += xml::escape(current->text());
@@ -716,22 +684,198 @@ namespace xml {
         return result;
     }
 
+    std::string element::prettyin() {
+        xml::element* temp = new xml::element("", false);
+
+        for (xml::element* child: this->children())
+            temp->add_child(child);
+
+        std::string result = temp->pretty();
+
+        for (xml::element* child: temp->children())
+            this->add_child(child);
+
+        return result;
+    }
+
+    void element::remove() {
+        int i = 0;
+
+        while (i < this->parent()->children().size() && this->parent()->children()[i] != this)
+            i++;
+
+        this->parent()->_children.erase(this->parent()->_children.begin() + i);
+
+        this->_parent = NULL;
+    }
+
+    bool& element::preamble::standalone() {
+        return this->_standalone;
+    }
+
+    std::string element::str() {
+        std::stack<element*> stack;
+        std::string          result;
+
+        stack.push(this);
+
+        element* previous = NULL;
+
+        while (!stack.empty()) {
+            element* current = stack.top();
+
+            switch (current->type()) {
+                case xml::type::element: {
+                    auto append_headers = [current, &result]{
+                        if (current->name().empty()) {
+                            if (current->parent() == NULL) {
+                                if (current->xd().display() ||
+                                    current->xd().version() != 1.0 ||
+                                    current->xd().encoding() != "UTF-8" ||
+                                    current->xd().standalone()) {
+                                        result += "<?xml version=\"";
+                                        result += truncate_d(current->xd().version(), 1);
+                                        result += "\" encoding=\"";
+                                        result += current->xd().encoding();
+                                        result += "\"";
+
+                                        if (current->xd().standalone())
+                                            result += " standalone=\"yes\"";
+                                            
+                                        result += "?>";
+                                    }
+
+                                if (current->dtd().name().length()) {
+                                    result += "<!DOCTYPE ";
+                                    result += current->dtd().name();
+
+                                    for (std::string identifier: current->dtd().identifiers()) {
+                                        result += " ";
+                                        result += identifier;
+                                    }
+
+                                    result += ">";
+                                }
+                            }
+
+                            return true;
+                        }
+
+                        return false;
+                    };
+
+                    if (current->children().empty()) {
+                        if (!append_headers()) {
+                            result += "<";
+                            result += current->name();
+
+                            for (const auto& [key, value]: current->attributes()) {
+                                result += " ";
+                                result += key;
+                                
+                                if (value.length()) {
+                                    result += "=";
+                                    result += ::escape(value);
+                                }
+                            }
+
+                            if (current->empty()) {
+                                if (current->attributes().size())
+                                    result += " ";
+                                
+                                result += "/";
+                            }
+
+                            result += ">";
+                        }
+
+                        stack.pop();
+
+                        previous = current;
+                    } else if (previous == current->children().back()) {
+                        if (current->name().length() && !current->empty()) {
+                            result += "</";
+                            result += current->name();
+                            result += ">";
+                        }
+
+                        stack.pop();
+
+                        previous = current;
+                    } else {
+                        if (!append_headers()) {
+                            result += "<";
+                            result += current->name();
+
+                            for (const auto& [key, value]: current->attributes()) {
+                                result += " ";
+                                result += key;
+                                
+                                if (value.length()) {
+                                    result += "=";
+                                    result += ::escape(value);
+                                }
+                            }
+
+                            if (current->empty()) {
+                                if (current->attributes().size())
+                                    result += " ";
+                                
+                                result += "/";
+                            }
+
+                            result += ">";
+                        }
+
+                        for (int i = (int) current->children().size(); i > 0; i--)
+                            stack.push(current->children()[i - 1]);
+                    }
+                    break;
+                } case xml::type::text: {
+                    result += xml::escape(current->text());
+
+                    stack.pop();
+
+                    previous = current;
+                    break;
+                } default:
+                    break;
+            }
+        }
+
+        return result;
+    }
+
+    std::string element::strin() {
+        xml::element* temp = new xml::element("", false);
+
+        for (xml::element* child: this->children())
+            temp->add_child(child);
+
+        std::string result = temp->str();
+
+        for (xml::element* child: temp->children())
+            this->add_child(child);
+
+        return result;
+    }
+
     std::string element::text() const {
         return this->_text;
     }
 
     void element::text(const std::string value) {
-        if (this->type() == XML_ELEMENT_TYPE) {
+        if (this->type() == xml::type::element) {
             if (this->children().size())
                 throw error("Error: Text element cannot have children");
 
-            this->_type = XML_TEXT_TYPE;
+            this->_type = xml::type::text;
         }
 
         this->_text = value;
     }
 
-    enum element::type element::type() const {
+    enum xml::type element::type() const {
         return this->_type;
     }
 

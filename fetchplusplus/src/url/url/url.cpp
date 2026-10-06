@@ -259,26 +259,37 @@ url::param::map& url::query_string::params() {
 }
 
 std::string url::query_string::str() {
-    std::ostringstream ss;
+    std::string result;
 
     if (this->params().size()) {
         param::map params = this->params();
 
         auto it = params.begin();
 
-        for (int i = 0; i < params.size() - 1; i++, it++)
-            for (std::string value: (* it).second.list())
-                ss << (* it).first << "=" << value << "&";
+        for (int i = 0; i < params.size() - 1; i++, it++) {
+            for (std::string value: (* it).second.list()) {
+                result += (* it).first;
+                result += "=";
+                result += value;
+                result += "&";
+            }
+        }
 
         std::vector<std::string> list = (* it).second.list();
 
-        for (size_t i = 0; i < list.size() - 1; i++)
-            ss << (* it).first << "=" << list[i] << "&";
+        for (size_t i = 0; i < list.size() - 1; i++) {
+            result += (* it).first;
+            result += "=";
+            result += list[i];
+            result += "&";
+        }
 
-        ss << (* it).first << "=" << list[list.size() - 1];
+        result += (* it).first;
+        result += "=";
+        result += list[list.size() - 1];
     }
     
-    return ss.str();
+    return result;
 }
 
 std::string url::fully_qualified_host() {
@@ -315,15 +326,20 @@ std::string& url::target() {
 }
 
 std::string url::str() {
-    std::ostringstream ss;
+    std::string result;
 
-    if (this->protocol().length())
-        ss << this->protocol() << "://";
+    if (this->protocol().length()) {
+        result += this->protocol();
+        result += "://";
+    }
 
-    ss << this->fully_qualified_host() << this->target();
+    result += this->fully_qualified_host();
+    result += this->target();
 
-    if (this->params().size())
-        ss << "?" << this->query();
+    if (this->params().size()) {
+        result += "?";
+        result += this->query();
+    }
 
-    return ss.str();
+    return result;
 }

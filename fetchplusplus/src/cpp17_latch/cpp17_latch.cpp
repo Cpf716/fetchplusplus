@@ -26,7 +26,7 @@ void cpp17_latch::count_down() {
 void cpp17_latch::wait() {
     std::unique_lock<std::mutex> lock(this->_mutex);
 
-    this->_cv.wait(lock, [this] {
+    this->_cv.wait(lock, [this]{
         return this->_count.load() == 0;
     });
 }

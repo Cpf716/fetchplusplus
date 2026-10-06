@@ -242,12 +242,12 @@ namespace fetch {
 
             // Member Fields
 
-            std::string _message;
+            std::string _str;
             url         _url;
 
             // Member Functions
 
-            std::string message() const;
+            std::string str() const;
 
             url         url();
         };

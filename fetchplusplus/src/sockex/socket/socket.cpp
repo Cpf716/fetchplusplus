@@ -104,7 +104,7 @@ namespace mysocket {
             throw mysocket::error(errno);
         }
         
-        this->_listener = std::thread([this] {
+        this->_listener = std::thread([this]{
             while (true) {
                 if (this->_shut_down.load())
                     return;

@@ -21,11 +21,13 @@
 #include <fcntl.h>
 
 namespace tls {
+    // Non-Member Fields
+
+    static const char* ca_path = "/etc/ssl/cert.pem";
+
     // Typedef
 
     struct error: public fpp::error { 
-        // Constructor
-
         error(const std::string what);
     };
 
@@ -36,16 +38,18 @@ namespace tls {
 
         // Member Fields
 
+        mbedtls_x509_crt         cacert;
+        mbedtls_ssl_config       conf;
+        mbedtls_ctr_drbg_context ctr_drbg;
+        mbedtls_entropy_context  entropy;
         mbedtls_net_context      server_fd;
         mbedtls_ssl_context      ssl;
-        mbedtls_ssl_config       conf;
-        mbedtls_x509_crt         cacert;
-        mbedtls_entropy_context  entropy;
-        mbedtls_ctr_drbg_context ctr_drbg;
     public:
         // Constructors
 
         tls_client(const std::string hostname, const int port);
+
+        tls_client(class logger* logger, const std::string hostname, const int port);
 
         // Member Functions
 
@@ -55,12 +59,6 @@ namespace tls {
 
         int         send(const std::string message);
     };
-
-    // Non-Member Functions
-
-    std::string ca_path();
-
-    void        logger(class logger* value);
 }
 
 #endif /* tls_h */

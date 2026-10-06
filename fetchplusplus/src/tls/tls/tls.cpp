@@ -10,23 +10,17 @@
 namespace tls {
     // Non-Member Fields
 
-    class logger* m_logger = NULL;
-
-    // Non-Member Functions
-
-    std::string ca_path() {
-        return "/etc/ssl/cert.pem";
-    }
-
-    void logger(class logger* value) {
-        m_logger = value;
-    }
-
-    error::error(const std::string what) : fpp::error(what) { }
+    class logger* logger = NULL;
 
     // Constructors
 
-    tls_client::tls_client(const std::string hostname, const int port) {
+    error::error(const std::string what) : fpp::error(what) { }
+
+    tls_client::tls_client(const std::string hostname, const int port) : tls_client(NULL, hostname, port) { }
+
+    tls_client::tls_client(class logger* logger, const std::string hostname, const int port) {
+        tls::logger = logger;
+
         const char *pers = "mbedtls_client";
         
         mbedtls_net_init(&server_fd);
@@ -36,17 +30,17 @@ namespace tls {
         mbedtls_entropy_init(&entropy);
         mbedtls_ctr_drbg_init(&ctr_drbg);
 
-        // 1: Error
-        mbedtls_debug_set_threshold(1);
-
-        if (m_logger != NULL && m_logger->level() == LOG_MOST) {
-            // 2: State Change
-            mbedtls_debug_set_threshold(2);
+        if (logger != NULL) {
+            if (logger->level() == logger_level::most)
+                // 2: State Change
+                mbedtls_debug_set_threshold(2);
+                // 1: Error
+            else mbedtls_debug_set_threshold(1);
         }
 
         // Define TLS logger callback
         mbedtls_ssl_conf_dbg(&conf, [](void* ctx, int level, const char* file, int line, const char* str) {
-            if (m_logger != NULL) m_logger->more(trim_end(str));
+           if (tls::logger != NULL) tls::logger->more(trim_end(str));
         }, NULL);
 
         // Initialize seed for the RNG
@@ -56,7 +50,7 @@ namespace tls {
         }
 
         // Read ca-bundle.crt
-        if (mbedtls_x509_crt_parse_file(&cacert, ca_path().c_str())) {
+        if (mbedtls_x509_crt_parse_file(&cacert, ca_path)) {
             throw tls::error("Failed to read cert.pem");
         }
 
@@ -85,7 +79,7 @@ namespace tls {
 
         // Set hostname
         if ((errnum = mbedtls_ssl_set_hostname(&ssl, hostname.c_str()))) {
-            throw tls::error([errnum] {
+            throw tls::error([errnum]{
                 switch (errnum) {
                     case MBEDTLS_ERR_SSL_ALLOC_FAILED:
                         return "Memory allocation failed";
@@ -104,7 +98,7 @@ namespace tls {
 
             // Connect to the server
             if ((errnum = mbedtls_net_connect(&server_fd, hosts[0].ip().c_str(), std::to_string(port).c_str(), MBEDTLS_NET_PROTO_TCP))) {
-                throw tls::error([errnum] {
+                throw tls::error([errnum]{
                     switch (errnum) {
                         case MBEDTLS_ERR_NET_SOCKET_FAILED:
                             return "Socket failed";
@@ -126,7 +120,7 @@ namespace tls {
                 if (!(errnum == MBEDTLS_ERR_SSL_WANT_READ || errnum == MBEDTLS_ERR_SSL_WANT_WRITE))
                     throw tls::error("SSL handshake failed");
 
-            if (m_logger != NULL) m_logger->more("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
+            if (logger != NULL) logger->more("* Connected to " + hostname + "(" + hosts[0].ip() + ") port " + std::to_string(443));
         } catch (dns::error& e) {
             throw tls::error(e.what());
         }

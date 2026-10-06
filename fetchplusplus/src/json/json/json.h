@@ -9,12 +9,21 @@
 #define json_h
 
 #include "util.h"
-#include <cassert>
 
 namespace json {
+    enum class type { array, object, primitive };
+
+    // Non-Member Fields
+
+    static const std::string null = "null";
+
+    static const std::string undefined = "undefined";
+
     // Typedef
     
-    struct error: public std::exception {
+    class error: public std::exception {
+        std::string _what;
+    public:
         // Constructors
 
         error(const std::string what);
@@ -22,16 +31,34 @@ namespace json {
         // Member Fields
 
         const char* what() const throw();
-    private:
-        // Member Fields
-        
-        std::string _what;
     };
 
-    struct object {
-        // Typedef
+    class object {
+        // Member Fields
         
-        enum type { JSON_ARRAY_TYPE, JSON_OBJECT_TYPE, JSON_PRIMITIVE_TYPE };
+        std::unordered_map<std::string, size_t> _map;
+        enum type                               _type = json::type::primitive;
+        std::string                             _value;
+        
+        // Member Functions
+
+        void _erase(const std::string key);
+
+        /**
+         * Perform hash lookup and return the property index, otherwise -1 if it does not exist
+         */
+        int  _find(const std::string key);
+    protected:
+        // Member Fields
+
+        std::string          _key;
+        std::vector<object*> _values;
+
+        // Member Functions
+
+        void _set(const size_t index, object* value);
+    public:
+        // Typedef
         
         // Constructors
         
@@ -39,132 +66,105 @@ namespace json {
         
         object(const std::string key);
 
-        /**
-         * options:
-         * - (k)ey
-         * - (t)ext
-         * - (v)alue
-         */
-        object(std::map<std::string, std::string> options);
-
         object(const enum type type);
+
+        object(const std::vector<object*> values);
         
         object(const std::string key, const enum type type);
         
         object(const std::string key, const std::string value);
-
-        object(const std::vector<object*> values, const enum type type = JSON_OBJECT_TYPE);
 
         ~object();
 
         // Member Functions
 
         /**
+         * Deep copy source and assign its contents to target
+         */
+        object*                  assign(object* value);
+
+        /**
          * Set undefined
          */
-        void         erase();
+        void                     erase();
 
         /**
          * Set item undefined
          */
-        void         erase(const size_t index);
+        void                     erase(const size_t index);
         
         /**
          * Delete property
          */
-        void         erase(const std::string key);
+        void                     erase(const std::string key);
 
         /**
          * Return property if it exists, otherwise return NULL
          */
-        object*      get(std::string key);
+        object*                  get(std::string key);
 
-        std::string  key();
+        std::string              key() const;
 
-        bool         null();
-
-        void         nullify();
-
-        double       number();
-                
-        /**
-         * Delete undefined properties
-         */
-        object*      sanitize();
-
-        /**
-         * Set array item or object property and return it
-         */
-        object*      set(object* value);
-        
-        /**
-         * Return array size
-         */
-        size_t       size();
-
-        std::string  string();
-
-        enum type&   type();
-        
-        bool         undefined();
-
-        std::string& value();
-
-        // Non-Member Functions
-
-        friend void                 __pretty_print(std::ostringstream& ss, object* value, const int index);
-
-        friend void                 _pretty_print(std::ostringstream& ss, object* value, const int index);
-
-        friend void                 _stringify(std::ostringstream& ss, object* value, const int index);
-
-        friend object*              assign(object* target, object* source);
-
-        friend std::string          stringify(object* value, bool pretty);
-
-        friend std::vector<object*> values(object* value);
-    protected:
-        // Member Fields
-
-        std::string          _key;
-        std::vector<object*> _values;
-    private:
-        // Member Fields
-        
-        std::unordered_map<std::string, size_t> _key_map;
-        enum type                               _type = JSON_PRIMITIVE_TYPE;
-        std::string                             _value;
-        
-        // Member Functions
-
-        void    _erase(const std::string key);
-
-        /**
-         * Perform binary search and return the relative index of key
-         */
-        int     _find(const std::string key);
+        std::vector<std::string> keys();
 
         /**
          * Build key map
          */
-        void    _map_keys();
+        void                     map();
+
+        bool                     null();
+
+        void                     nullify();
+
+        double                   number();
+
+        std::string              pretty();
+                
+        /**
+         * Delete undefined properties
+         */
+        object*                  sanitize();
 
         /**
-         * Parse JSON string to object
+         * Set array item or object property and return it
          */
-        void    _parse(const std::string text);
+        object*                  set(object* value);
         
-        object* _parse(object* target, std::vector<std::string>& source, const int start, const int end);
+        /**
+         * Return array size
+         */
+        size_t                   size();
+
+        std::string              str();
+
+        std::string              str_value();
+
+        enum type&               type();
+        
+        bool                     undefined();
+
+        std::string&             value();
+
+        // Do not modify!
+        std::vector<object*>&    values();    
     };
 
     class array: public object {
-        // Member Functions
-
         json::array* _splice(const int start, const int delete_count, const std::vector<object*> values);
     public:
         // Typedef
 
-        struct iterator {
+        class iterator {
+            // Member Fields
+
+            int                  _index = 0;
+            size_t               _size;
+            std::vector<object*> _values;
+
+            // Constructors
+
+            iterator(const size_t size, std::vector<object*> values);
+        public:
             // Typdef
 
             friend json::array;
@@ -190,16 +190,6 @@ namespace json {
             bool      operator==(const iterator& value) const;
 
             bool      operator!=(const iterator& value) const;
-        private:
-            // Member Fields
-
-            int                  _index = 0;
-            size_t               _size;
-            std::vector<object*> _values;
-
-            // Constructors
-
-            iterator(const size_t size, std::vector<object*> values);
         };
 
         // Constructors
@@ -255,23 +245,13 @@ namespace json {
 
     // Non-Member Functions
 
-    object*                                      assign(object* target, object* source);
+    object*                                      from_value(const double value);
 
-    std::vector<std::pair<std::string, object*>> entries(object* value);
-
-    std::vector<std::string>                     keys(object* value);
-
-    std::string                                  null();
+    object*                                      from_value(const std::string value);
 
     object*                                      parse(const std::string text);
 
-    std::string                                  stringify(object* value, bool pretty = false);
-
     std::string                                  typestr(object* value);
-
-    std::string                                  undefined();
-
-    std::vector<object*>                         values(object* value);
 }
 
 #endif /* json_h */

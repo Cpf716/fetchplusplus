@@ -236,16 +236,18 @@ bool is_string(const std::string value) {
 }
 
 std::string join(std::vector<std::string> values, std::string delimeter) {
-    std::ostringstream ss;
+    std::string result;
         
     if (values.size()) {
-        for (size_t i = 0; i < values.size() - 1; i++)
-            ss << values[i] << delimeter;
+        for (size_t i = 0; i < values.size() - 1; i++) {
+            result += values[i];
+            result += delimeter;
+        }
 
-        ss << values[values.size() - 1];
+        result += values[values.size() - 1];
     }
         
-    return ss.str();
+    return result;
 }
 
 void merge(std::vector<std::string>& values, const std::string delimiter) {
@@ -623,6 +625,22 @@ std::string trim(const std::string string) {
     return string.substr(start, end - start);
 }
 
+std::string_view trim(const std::string_view string) {
+    // Find leading whitespace
+    size_t start = 0;
+    
+    while (start < string.length() && isspace(string[start]))
+        start++;
+    
+    // Find trailing whitespace
+    size_t end = string.length();
+    
+    while (end > start && isspace(string[end - 1]))
+        end--;
+        
+    return string.substr(start, end - start);
+}
+
 std::string trim_end(const std::string string) {
     size_t end = string.length();
 
@@ -641,7 +659,7 @@ std::string trim_start(const std::string string) {
     return string.substr(start);
 }
 
-std::string truncate_d(const double number, const int min_prec) {
+std::string truncate_d(const double number, const int minprec) {
     std::vector<int> d = digits(number);
 
     int i = (int) d.size() - 1;
@@ -672,13 +690,13 @@ std::string truncate_d(const double number, const int min_prec) {
         for (k = j + 1; k <= i; k++)
             result.push_back(std::to_string(d[k]));
 
-        for (; k <= j + min_prec; k++)
+        for (; k <= j + minprec; k++)
             result.push_back(std::to_string(0));
 
     } else if (d[i] == -1) {
         result.push_back(".");
 
-        for (int k = 0; k < min_prec; k++)
+        for (int k = 0; k < minprec; k++)
             result.push_back(std::to_string(0));
     }
 

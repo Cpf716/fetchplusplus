@@ -13,6 +13,8 @@
 namespace xml {
     // Typedef
 
+    enum class type { element, text };
+
     class error: public std::exception {
         // Member Fields
 
@@ -29,8 +31,6 @@ namespace xml {
 
     struct element {
         // Typedef
-
-        enum type { XML_ELEMENT_TYPE, XML_TEXT_TYPE };
 
         class document_type {
             // Member Fields
@@ -74,10 +74,10 @@ namespace xml {
         
         // Constructors
 
-        // Instantiate element of type XML_TEXT_TYPE
+        // Instantiate element of type xml::type::text
         element();
 
-        // Instantiate element of type XML_ELEMENT_TYPE; leave name empty for root
+        // Instantiate element of type xml::type::element; leave name empty for root
         element(const std::string name, const bool xd = true);
 
         ~element();
@@ -118,6 +118,10 @@ namespace xml {
 
         // Return NULL if root; otherwise, return parent
         element*                                      parent();
+
+        std::string                                   pretty();
+
+        std::string                                   prettyin();
 
         // Remove oneself from parent
         void                                          remove();

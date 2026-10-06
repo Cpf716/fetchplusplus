@@ -44,24 +44,25 @@ namespace fetch {
     http_client::request::request(header::map& headers, const std::string url, const std::string method, const std::string body) {
         // Begin - Map start line
         // Map method
-        std::stringstream ss(toupperstr(method) + " ");
-
-        // Set cursor to the end
-        ss.seekp(0, std::ios::end);
+        this->_str += toupperstr(method);
+        this->_str += " ";
 
         try {
             // Map target
             this->_url = ::url(url);
 
-            ss << this->url().target();
+            this->_str += this->url().target();
             
-            if (this->url().params().size())
-                ss << "?" << this->url().query();
+            if (this->url().params().size()) {
+                this->_str += "?";
+                this->_str += this->url().query();
+            }
             
-            ss << " ";
+            this->_str += " ";
 
             // Map protocol
-            ss << "HTTP/1.1" << "\r\n";
+            this->_str += "HTTP/1.1";
+            this->_str += "\r\n";
             // End - Map start line
 
             // Map request headers
@@ -77,7 +78,9 @@ namespace fetch {
 
             headers.erase("host");
             
-            ss << "Host: " << host << "\r\n";
+            this->_str += "Host: ";
+            this->_str += host;
+            this->_str += "\r\n";
             
             auto it = headers.find("content-length");
 
@@ -99,23 +102,27 @@ namespace fetch {
                 for (size_t i = 0; i < tokens.size(); i++)
                     tokens[i] = std::string((char[]) { (char) toupper(tokens[i][0]), '\0' }) + tokens[i].substr(1);
 
-                for (size_t i = 0; i < tokens.size() - 1; i++)
-                    ss << tokens[i] << "-";
+                for (size_t i = 0; i < tokens.size() - 1; i++) {
+                    this->_str += tokens[i];
+                    this->_str += "-";
+                }
 
-                ss << tokens[tokens.size() - 1] << ": " << value.str() << "\r\n";
+                this->_str += tokens[tokens.size() - 1];
+                this->_str += ": ";
+                this->_str += value.str();
+                this->_str += "\r\n";
             }
 
             headers.try_emplace("Host", host);
 
             // Map body
             if (body.length()) {
-                ss << "\r\n";
-                ss << body << "\r\n";
+                this->_str += "\r\n";
+                this->_str += body;
+                this->_str += "\r\n";
             }
 
-            ss << "\r\n";
-
-            this->_message = ss.str();
+            this->_str += "\r\n";
         } catch (url::error& e) {
             throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR));
         }
@@ -477,10 +484,10 @@ namespace fetch {
         try {
             fpp::fpp_client* client = this->_pool.get()->get_connection(host, url_obj);
             
-            this->_logger->more(request.message());
+            this->_logger->more(request.str());
 
             try {
-                client->send(request.message());
+                client->send(request.str());
                 
                 int timeout = this->timeout();
 
@@ -517,7 +524,7 @@ namespace fetch {
 
                 header::map response_headers = response_obj.headers();
 
-                auto try_keep_alive = [response_headers, host, this, url_obj] {
+                auto try_keep_alive = [response_headers, host, this, url_obj]{
                     auto it = response_headers.find("connection");
 
                     if (it == response_headers.end() || (* it).second.str() != "keep-alive")
@@ -551,7 +558,7 @@ namespace fetch {
                     }
                 };
 
-                auto benchmark = [this, start]() {
+                auto benchmark = [this, start]{
                     this->_logger->more(
                         std::to_string(
                             std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
@@ -635,11 +642,11 @@ namespace fetch {
     }
 
     response http_client::head(header::map& headers, const std::string url, json::object* body) {
-        return this->head(headers, url, json::stringify(body));
+        return this->head(headers, url, body->str());
     }
 
     void http_client::head(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
-        this->head(headers, url, json::stringify(body), cb);
+        this->head(headers, url, body->str(), cb);
     }
 
     response http_client::head(header::map& headers, const std::string url, xml::element* body) {
@@ -669,13 +676,13 @@ namespace fetch {
     response http_client::post(header::map& headers, const std::string url, json::object* body) {
         headers["content-type"] = std::string("application/json");
 
-        return this->post(headers, url, json::stringify(body));
+        return this->post(headers, url, body->str());
     }
 
     void http_client::post(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
         headers["content-type"] = std::string("application/json");
 
-        this->post(headers, url, json::stringify(body), cb);
+        this->post(headers, url, body->str(), cb);
     }
 
     response http_client::post(header::map& headers, const std::string url, xml::element* body) {
@@ -701,13 +708,13 @@ namespace fetch {
     response http_client::put(header::map& headers, const std::string url, json::object* body) {
         headers["content-type"] = std::string("application/json");
 
-        return this->put(headers, url, json::stringify(body));
+        return this->put(headers, url, body->str());
     }
 
     void http_client::put(header::map& headers, const std::string url, json::object* body, std::function<void(response, fetch::error)> cb) {
         headers["content-type"] = std::string("application/json");
 
-        this->put(headers, url, json::stringify(body), cb);
+        this->put(headers, url, body->str(), cb);
     }
 
     response http_client::put(header::map& headers, const std::string url, xml::element* body) {
@@ -752,7 +759,7 @@ namespace fetch {
     }
 
     size_t http_client::pool::close(const std::string host) {
-        return _lock(this->_mutex, [this, host] {
+        return _lock(this->_mutex, [this, host]{
             return this->_close(host);
         });
     }
@@ -804,11 +811,9 @@ namespace fetch {
         // Connection not found or unavailable; create new connection
         if (connection == NULL) {
             if (url.protocol() == "https") {
-                tls::logger(this->_logger);
-                
                 try {
                     // TLS "client hello" requires fully-qualified hostname; therefore, DNS resolution is performed internally
-                    connection = new tls::tls_client(host, url.port());
+                    connection = new tls::tls_client(this->_logger, host, url.port());
                 } catch (tls::error& e) {
                     throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
                 }
@@ -834,7 +839,7 @@ namespace fetch {
                 host += "-" + std::to_string(count);
             }
 
-            _lock(this->_mutex, [this, host, connection] {
+            _lock(this->_mutex, [this, host, connection]{
                 return this->_connections.try_emplace(host, pool::connection(connection));
             });
         } else
@@ -847,7 +852,7 @@ namespace fetch {
         size_t number,
                 timeout;
 
-        if (_lock(this->_mutex, [this, cb, host, &number, &timeout] {
+        if (_lock(this->_mutex, [this, cb, host, &number, &timeout]{
             pool::connection* connection = &this->_connections[host];
 
             cb(connection);
@@ -868,7 +873,7 @@ namespace fetch {
             for (size_t i = 0; i < timeout * 10 && !this->_shut_down.load(); i++)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
-            _lock(this->_mutex, [this, host, number] {
+            _lock(this->_mutex, [this, host, number]{
                 pool::connection* connection = &this->_connections[host];
 
                 if (connection->number() == number)
@@ -879,8 +884,8 @@ namespace fetch {
         }, url.host()));
     }
 
-    std::string http_client::request::message() const {
-        return this->_message;
+    std::string http_client::request::str() const {
+        return this->_str;
     }
 
     url http_client::request::url() {
