@@ -18,7 +18,13 @@
 #include <thread>
 #include <unistd.h>     // close, read
 
-namespace mysocket {
+namespace sockex {
+    // Non-Member Functions
+
+    static constexpr size_t buffer_length = 65536;
+
+    static constexpr size_t thread_pool_size = 10;
+
     // Typedef
     
     struct error: public fpp::error {
@@ -90,6 +96,26 @@ namespace mysocket {
             int         send(const std::string message) const;
         };
 
+        class thread_pool {
+            // Member Fields
+
+            std::condition_variable           _cv;
+            std::queue<std::function<void()>> _handlers;
+            std::mutex                        _mutex;
+            bool                              _stop = false;
+            std::vector<std::thread>          _threads;
+        public:
+            // Constructors
+
+            thread_pool(const size_t size);
+
+            ~thread_pool();
+
+            // Member Functions
+
+            void enqueue(std::function<void()> handler);
+        };
+
         // Constructors
 
         tcp_server(const int port, const int backlog = 1024);
@@ -110,20 +136,20 @@ namespace mysocket {
 
         // Member Fields
 
-        struct sockaddr_in               _address;
-        int                              _address_length;
-        std::vector<connection*>         _connections;
-        int                              _file_descriptor;
-        std::function<void(connection*)> _handler = [](const class connection* connection){ };
-        std::thread                      _listener;
-        std::mutex                       _mutex;
-        std::atomic<bool>                _shut_down = false;
+        struct sockaddr_in                      _address;
+        int                                     _address_length;
+        std::vector<connection*>                _connections;
+        int                                     _file_descriptor;
+        std::function<void(connection*)>        _handler = [](const class connection* connection){ };
+        std::unordered_map<connection*, size_t> _index;
+        std::thread                             _listener;
+        thread_pool                             _pool = thread_pool(thread_pool_size);
+        std::mutex                              _mutex;
+        std::atomic<bool>                       _stop = false;
 
         // Member Functions
 
-        int _find_connection(const class connection* connection);
-
-        int _find_connection(const class connection* connection, const size_t start, const size_t end);
+        int _find_connection(class connection* connection);
     };
 
     struct udp_socket {

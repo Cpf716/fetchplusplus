@@ -27,7 +27,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9C03391F2E66CAE30007318B /* fetchplusplus */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "fetchplusplus";
+			path = fetchplusplus;
 			sourceTree = "<group>";
 		};
 		9C2D53332E6A99CC00F1F10E /* test-server */ = {
@@ -89,7 +89,7 @@
 			name = fetchplusplus;
 			packageProductDependencies = (
 			);
-			productName = "fetchplusplus";
+			productName = fetchplusplus;
 			productReference = 9C03391D2E66CAE30007318B /* fetchplusplus */;
 			productType = "com.apple.product-type.tool";
 		};

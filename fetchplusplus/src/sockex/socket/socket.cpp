@@ -7,27 +7,25 @@
 
 #include "socket.h"
 
-namespace mysocket {
+namespace sockex {
     // Non-Member Functions
 
-    std::string _recv(const int file_descriptor) {
-        char buff[BUFF_LEN] = {0};
+    std::string recv(const int file_descriptor) {
+        char buff[buffer_length] = {0};
             
-        ssize_t len = recv(file_descriptor, buff, BUFF_LEN, 0);
+        ssize_t len = ::recv(file_descriptor, buff, buffer_length, 0);
 
-        if (len == -1)
-            throw mysocket::error(errno);
+        if (len == -1) throw sockex::error(errno);
 
         buff[len] = '\0';
         
         return std::string(buff);
     }
 
-    int _send(const int file_descriptor, const std::string message) {
+    int send(const int file_descriptor, const std::string message) {
         ssize_t len = ::send(file_descriptor, message.c_str(), message.length(), MSG_NOSIGNAL);
             
-        if (len == -1)
-            throw mysocket::error(errno);
+        if (len == -1) throw sockex::error(errno);
         
         return (int) len;
     }
@@ -47,7 +45,7 @@ namespace mysocket {
         this->_file_descriptor = ::socket(AF_INET, SOCK_STREAM, 0);
             
         if (this->_file_descriptor == -1)
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         
         struct sockaddr_in addr;
 
@@ -58,13 +56,13 @@ namespace mysocket {
         addr.sin_port = htons(port);
         
         if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) == -1)
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         
-        // Returns 0 for success, -1 otherwise
+        // Returns 0 for success, otherwise -1
         if (connect(this->_file_descriptor, (struct sockaddr *)&addr, sizeof(addr))) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
     }
 
@@ -72,14 +70,14 @@ namespace mysocket {
         this->_file_descriptor = ::socket(AF_INET, SOCK_STREAM, 0);
             
         if (this->_file_descriptor == -1)
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
                 
         int opt = 1;
         
         if (setsockopt(this->_file_descriptor, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
             
         // Listen for any IP address
@@ -95,39 +93,43 @@ namespace mysocket {
         if (bind(this->_file_descriptor, (struct sockaddr *)&this->_address, this->_address_length)) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
         
         if (listen(this->_file_descriptor, backlog)) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
         
         this->_listener = std::thread([this]{
-            while (true) {
-                if (this->_shut_down.load())
-                    return;
+            for (;;) {
+                if (this->_stop.load()) return;
                 
                 // Returns nonnegative file descriptor or -1 for error
                 int file_descriptor = accept(
                     this->_file_descriptor,
-                    (struct sockaddr *)&this->_address, (socklen_t *)&this->_address_length);
+                    (struct sockaddr *)&this->_address, (socklen_t *)&this->_address_length
+                );
                 
-                if (file_descriptor == -1)
-                    continue;
+                if (file_descriptor == -1) continue;
 
                 class connection* connection = new class connection(this, file_descriptor);
-                
-                this->_mutex.lock();
-                this->_connections.push_back(connection);
-                
-                // Sort into place
-                for (size_t i = this->_connections.size() - 1; i > 0 && this->_connections[i] < this->_connections[i - 1]; i--)
-                    std::swap(this->_connections[i], this->_connections[i - 1]);
-                
-                this->_mutex.unlock();
-                this->_handler(connection);
+                {
+                    std::lock_guard lock(this->_mutex);
+
+                    if (this->_index.empty() && this->_connections.size() >= 20) {
+                        for (size_t i = 0; i < this->_connections.size(); i++)
+                            this->_index[connection] = i;
+                    } else if (!this->_index.empty())
+                        this->_index[connection] = this->_connections.size();
+
+                    this->_connections.push_back(connection);
+                }
+
+                this->_pool.enqueue([this, connection]{
+                    this->_handler(connection);
+                });
             }
         });
     }
@@ -136,11 +138,49 @@ namespace mysocket {
         this->_handler = handler;
     }
 
+    tcp_server::thread_pool::thread_pool(const size_t size) {
+        this->_threads.reserve(size);
+
+        for (int i = 0; i < size; i++) {
+            this->_threads.emplace_back([this]{
+                for (;;) {
+                    std::function<void()> handler;
+                    {
+                        std::unique_lock lock(this->_mutex);
+
+                        this->_cv.wait(lock, [this]{ return this->_stop || !this->_handlers.empty(); });
+
+                        if (this->_stop) return;
+                        
+                        handler = std::move(this->_handlers.front());
+
+                        this->_handlers.pop();
+                    }
+
+                    handler();
+                }
+            });
+        }
+    }
+
+    tcp_server::thread_pool::~thread_pool() {
+        {
+            std::lock_guard lock(this->_mutex);
+
+            this->_stop = true;
+        }
+
+        this->_cv.notify_all();
+
+        for (int i = 0; i < this->_threads.size(); i++)
+            this->_threads[i].join();
+    }
+
     udp_client::udp_client(const std::string host, const int port) {
         this->_file_descriptor = ::socket(AF_INET, SOCK_DGRAM, 0);
             
         if (this->_file_descriptor == -1)
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         
         this->_address = new struct sockaddr_in();
         
@@ -155,7 +195,7 @@ namespace mysocket {
         if (inet_pton(AF_INET, host.c_str(), &this->_address->sin_addr) == -1) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
     }
 
@@ -163,7 +203,7 @@ namespace mysocket {
         this->_file_descriptor = ::socket(AF_INET, SOCK_DGRAM, 0);
             
         if (this->_file_descriptor == -1)
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         
         // Server
         struct sockaddr_in addr;
@@ -182,10 +222,10 @@ namespace mysocket {
         if (bind(this->_file_descriptor, (const struct sockaddr *)&addr, sizeof(addr))) {
             ::close(this->_file_descriptor);
             
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         }
         
-        // Client
+        // Client address
         this->_address = new struct sockaddr_in();
         
         memset(this->_address, 0, sizeof(* this->_address));
@@ -205,28 +245,25 @@ namespace mysocket {
 
     void tcp_server::connection::_close() {
         if (::close(this->_file_descriptor))
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
 
         delete this;
     }
 
-    int tcp_server::_find_connection(const class connection* connection) {
-        return this->_find_connection(connection, 0, this->_connections.size());
-    }
+    int tcp_server::_find_connection(class connection* connection) {
+        if (this->_connections.size() >= 20) {
+            auto it = this->_index.find(connection);
 
-    int tcp_server::_find_connection(const class connection* connection, const size_t start, const size_t end) {
-        if (start == end)
-            return -1;
-        
-        size_t len = floor((end - start) / 2);
-        
-        if (this->_connections[start + len] == connection)
-            return (int) (start + len);
-        
-        if (this->_connections[start + len] > connection)
-            return this->_find_connection(connection, start, start + len);
-        
-        return this->_find_connection(connection, start + len + 1, end);
+            if (it == this->_index.end()) return -1;
+
+            return (int) (* it).second;
+        }
+
+        auto it = std::find(this->_connections.begin(), this->_connections.end(), connection);
+
+        if (it == this->_connections.end()) return -1;
+
+        return (int) std::distance(this->_connections.begin(), it);
     }
 
     void tcp_server::connection::close() {
@@ -235,74 +272,66 @@ namespace mysocket {
 
     void tcp_client::close() {
         if (::close(this->_file_descriptor)) 
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
 
         delete this;
     }
 
     void tcp_server::close() {
-        this->_shut_down.store(true);
-        this->_mutex.lock();
+        this->_stop.store(true);
         
-        if (::close(this->_file_descriptor)) {
-            this->_mutex.unlock();
-
-            throw mysocket::error(errno);
-        }
+        std::lock_guard lock(this->_mutex);
+        
+        if (::close(this->_file_descriptor))
+            throw sockex::error(errno);
         
         this->_listener.join();
 
         for (size_t i = 0; i < this->_connections.size(); i++) {
-            if (::close(this->_connections[i]->_file_descriptor)) {
-                this->_mutex.unlock();
-
-                throw mysocket::error(errno);
-            }
+            if (::close(this->_connections[i]->_file_descriptor))
+                throw sockex::error(errno);
                 
             delete this->_connections[i];
         }
-
-        this->_mutex.unlock();
         
         delete this;
     }
 
     void udp_socket::close() {
         if (::close(this->_file_descriptor))
-            throw mysocket::error(errno);
+            throw sockex::error(errno);
         
         delete this->_address;
         delete this;
     }
 
     void tcp_server::close(class connection* connection) {
-        this->_mutex.lock();
+        std::lock_guard lock(this->_mutex);
         
         int index = this->_find_connection(connection);
 
-        if (index == -1)
-            return this->_mutex.unlock();
+        if (index == -1) return;
 
-        try {
-            connection->_close();
-        } catch (mysocket::error& e) {
-            this->_mutex.unlock();
-
-            throw e;
-        }
+        connection->_close();
 
         this->_connections.erase(this->_connections.begin() + index);
-        this->_mutex.unlock();
+        this->_index.erase(connection);
     }
 
     std::vector<tcp_server::connection*> tcp_server::connections() {
-        this->_mutex.lock();
+        std::lock_guard lock(this->_mutex);
 
-        std::vector<connection*> temp = this->_connections;
+        return this->_connections;
+    }
 
-        this->_mutex.unlock();
+    void tcp_server::thread_pool::enqueue(std::function<void()> handler) {
+        {
+            std::lock_guard lock(this->_mutex);
 
-        return temp;
+            this->_handlers.push(std::move(handler));
+        }
+
+        this->_cv.notify_one();
     }
 
     int error::errnum() const {
@@ -310,11 +339,11 @@ namespace mysocket {
     }
 
     std::string tcp_server::connection::recv() const {
-        return _recv(this->_file_descriptor);
+        return sockex::recv(this->_file_descriptor);
     }
 
     std::string tcp_client::recv() {
-        return _recv(this->_file_descriptor);
+        return sockex::recv(this->_file_descriptor);
     }
 
     std::string udp_socket::recvfrom() const {
@@ -322,8 +351,7 @@ namespace mysocket {
         socklen_t addrlen = sizeof(* this->_address);
         ssize_t   len = ::recvfrom(this->_file_descriptor, (char *)buff, 1024, MSG_WAITALL, (struct sockaddr *)this->_address, &addrlen);
         
-        if (len == -1)
-            throw mysocket::error(errno);
+        if (len == -1) throw sockex::error(errno);
         
         buff[len] = '\0';
         
@@ -331,18 +359,17 @@ namespace mysocket {
     }
 
     int tcp_server::connection::send(const std::string message) const {
-        return _send(this->_file_descriptor, message);
+        return sockex::send(this->_file_descriptor, message);
     }
 
     int tcp_client::send(const std::string message) {
-        return _send(this->_file_descriptor, message);
+        return sockex::send(this->_file_descriptor, message);
     }
 
     int udp_socket::sendto(const std::string message) const {
         ssize_t len = ::sendto(this->_file_descriptor, (const char *)message.c_str(), message.length(), 0, (const struct sockaddr *)this->_address, sizeof(* this->_address));
         
-        if (len == -1)
-            throw mysocket::error(errno);
+        if (len == -1) throw sockex::error(errno);
         
         return (int) len;
     }

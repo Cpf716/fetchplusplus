@@ -481,7 +481,6 @@ std::vector<std::string_view> split(const std::string_view string, const std::st
     return result;
 }
 
-
 std::vector<std::string> split(const std::string string, const std::string delimeter) {
     int start = 0;
     

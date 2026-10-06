@@ -66,7 +66,7 @@ try {
     
     std::unique_ptr<json::object> json_ptr(response.json());
 
-    std::cout << unescape(json_ptr.get()->value()) << std::endl;
+    std::cout << unescape(json_ptr->value()) << std::endl;
 } catch (fetch::error& e) {
     throw e;
 }

@@ -75,7 +75,7 @@ url::query_string::query_string(const std::string value) {
         struct param value = tokens.size() == 1 ? "" : tokens[1];
 
         if (it == this->params().end()) {
-            this->_params.try_emplace(key, value);
+            this->_params.emplace(key, value);
         } else {
             std::vector<std::string> new_value = (* it).second.list();
             

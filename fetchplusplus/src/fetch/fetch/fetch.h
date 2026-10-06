@@ -8,14 +8,16 @@
 #ifndef fetch_h
 #define fetch_h
 
-#define FPP_VERSION 0.1
-
 #include "json.h"
 #include "socket.h"
 #include "tls.h"
 #include "xml.h"
 
 namespace fetch {
+    static constexpr double fpp_version = 0.1;
+
+    static constexpr size_t keep_alive_timeout = 5;
+
     // Typedef
 
     enum status_code {
@@ -129,21 +131,21 @@ namespace fetch {
         /**
          * Return response header
          */
-        header       get(const std::string key);
+        header        get(const std::string key);
 
-        header::map  headers();
+        header::map   headers();
 
         json::object* json();
 
-        bool         ok() const;
+        bool          ok() const;
 
-        status_code  status() const;
+        status_code   status() const;
 
-        std::string  status_text() const;
+        std::string   status_text() const;
 
-        std::string  text() const;
+        std::string   text() const;
 
-        trailer::map trailers();
+        trailer::map  trailers();
 
         xml::element* xml();
     };
@@ -212,7 +214,7 @@ namespace fetch {
 
             // Member Functions
 
-            size_t           close(const std::string host);
+            void             close(const std::string host);
 
             fpp::fpp_client* get_connection(const std::string host, class url url);
         
@@ -223,12 +225,12 @@ namespace fetch {
             connection::map          _connections;
             logger*                  _logger = NULL;
             std::mutex               _mutex;
-            std::atomic<bool>        _shut_down = false;
+            std::atomic<bool>        _stop = false;
             std::vector<std::thread> _threads;
             
             // Member Functions
             
-            size_t      _close(const std::string host);
+            void _close(const std::string host);
         };
 
         class request {

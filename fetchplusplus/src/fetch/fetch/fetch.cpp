@@ -86,14 +86,11 @@ namespace fetch {
 
             // Generate content-length, if required
             if (it == headers.end() && body.length())
-                headers.try_emplace("content-length", (int) body.length());
+                headers.emplace("content-length", (int) body.length());
 
-            it = headers.find("accept");
-
-            if (it == headers.end())
-                headers.try_emplace("accept", "*/*");
+            headers.try_emplace("accept", "*/*");
             
-            headers["user-agent"] = "fetch++/" + truncate_d(FPP_VERSION, 1);
+            headers["user-agent"] = "fetch++/" + truncate_d(fpp_version, 1);
 
             // Map to hyphenated Pascal case
             for (const auto& [key, value]: headers) {
@@ -113,7 +110,7 @@ namespace fetch {
                 this->_str += "\r\n";
             }
 
-            headers.try_emplace("Host", host);
+            headers.emplace("Host", host);
 
             // Map body
             if (body.length()) {
@@ -156,7 +153,7 @@ namespace fetch {
     }
 
     http_client::pool::~pool() {
-        this->_shut_down.store(true);
+        this->_stop.store(true);
 
         for (size_t i = 0; i < this->_threads.size(); i++)
             if (this->_threads[i].joinable())
@@ -223,16 +220,6 @@ namespace fetch {
 
     // Non-Member Functions
 
-    auto _lock(std::mutex& mtx, auto cb) {
-        mtx.lock();
-
-        auto res = cb();
-
-        mtx.unlock();
-
-        return res;
-    }
-
     response http_client::_parse_response(fpp::fpp_client* client, const std::string method, const std::string data) {
         // Begin - Parse response
         std::istringstream iss(data);
@@ -262,8 +249,20 @@ namespace fetch {
             if (header.size() == 1)
                 break;
 
-            // Case-insensitive
-            headers.try_emplace(tolowerstr(header[0]), trim(line.substr(header[0].length() + 1)));
+            std::string key = tolowerstr(header[0]),
+                         value = trim(line.substr(header[0].length() + 1));
+
+            auto it = headers.find(key);
+
+            if (it == headers.end())
+                headers.emplace(key, value);
+            else {
+                std::vector<std::string> list = (* it).second;
+
+                list.push_back(value);
+
+                headers[key] = list;
+            }
         }
 
         std::string  text;
@@ -310,7 +309,7 @@ namespace fetch {
                     };
 
                     if (read(text)) {
-                        while (true) {
+                        for (;;) {
                             std::string response = client->recv();
 
                             this->_logger->more(response);
@@ -477,12 +476,11 @@ namespace fetch {
 
         std::string host = url_obj.fully_qualified_host();
 
-        std::shared_ptr<std::atomic<bool>> recved = std::make_shared<std::atomic<bool>>(false);
-
-        std::chrono::time_point start = std::chrono::steady_clock::now();
+        auto recved = std::make_shared<std::atomic<bool>>(false);
+        auto start = std::chrono::steady_clock::now();
 
         try {
-            fpp::fpp_client* client = this->_pool.get()->get_connection(host, url_obj);
+            fpp::fpp_client* client = this->_pool->get_connection(host, url_obj);
             
             this->_logger->more(request.str());
 
@@ -502,7 +500,7 @@ namespace fetch {
                     recved->store(true);
 
                     // Sever connection
-                    this->_pool.get()->close(host);
+                    this->_pool->close(host);
                 }, recved));
                 
                 // Fetch first packet from the server
@@ -528,7 +526,7 @@ namespace fetch {
                     auto it = response_headers.find("connection");
 
                     if (it == response_headers.end() || (* it).second.str() != "keep-alive")
-                        this->_pool.get()->close(host);
+                        this->_pool->close(host);
                     else {
                         auto it = response_headers.find("keep-alive");
                         int  timeout;
@@ -536,18 +534,20 @@ namespace fetch {
                         url::param::map keep_alive;
 
                         if (it == response_headers.end())
-                            timeout = 5;
+                            timeout = keep_alive_timeout;
                         else {
-                            keep_alive = url::query_string(join((* it).second.list(), "&")).params();
+                            std::vector<std::string> keep_alive_obj = split((* it).second.str(), ";");
+                            
+                            keep_alive = url::query_string(keep_alive_obj[0]).params();
 
                             // Implicitly converted from nan to INT_MIN
                             timeout = floor(keep_alive["timeout"].number());
 
                             if (timeout < 1)
-                                timeout = 5;
+                                timeout = keep_alive_timeout;
                         }
                         
-                        this->_pool.get()->release(host, url_obj, [timeout, &keep_alive](pool::connection* connection) {
+                        this->_pool->release(host, url_obj, [timeout, &keep_alive](pool::connection* connection) {
                             connection->timeout() = timeout;
 
                             int max = floor(keep_alive["max"].number());
@@ -571,7 +571,7 @@ namespace fetch {
                 if (response_obj.text().length()) {
                     // Response is non-empty but has no content-length; disconnect immediately
                     if (response_headers.find("content-length") == response_headers.end())
-                        this->_pool.get()->close(host);
+                        this->_pool->close(host);
                     else try_keep_alive();
                 } else try_keep_alive();
 
@@ -614,7 +614,7 @@ namespace fetch {
                 if (recved->load())
                     throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), "Connection timed out");
 
-                this->_pool.get()->close(host);
+                this->_pool->close(host);
 
                 throw e;
             }
@@ -747,66 +747,65 @@ namespace fetch {
         return this->_timeout;
     }
 
-    size_t http_client::pool::_close(const std::string host) {
+    void http_client::pool::_close(const std::string host) {
         auto it = this->_connections.find(host);
         
         (* it).second.value()->close();
             
         this->_connections.erase(it);
         this->_logger->more("");
-
-        return 0;
     }
 
-    size_t http_client::pool::close(const std::string host) {
-        return _lock(this->_mutex, [this, host]{
-            return this->_close(host);
-        });
+    void http_client::pool::close(const std::string host) {
+        std::lock_guard lock(this->_mutex);
+
+        this->_close(host);
     }
 
     fpp::fpp_client* http_client::pool::get_connection(std::string host, class url url) {
         size_t count = 0;
+
+        fpp::fpp_client* connection = NULL;
+
+        {
+            std::lock_guard lock(this->_mutex);
         
-        fpp::fpp_client* connection = _lock(this->_mutex, [this, host, &count]() -> fpp::fpp_client* {
             auto it = this->_connections.find(host);
 
             // Connection not found
-            if (it == this->_connections.end())
-                return NULL;
+            if (it != this->_connections.end()) {
+                http_client::pool::connection* connection_obj = &(* it).second;
 
-            http_client::pool::connection* connection = &(* it).second;
-
-            // Connection available; reserve and return
-            if (connection->released()) {
-                connection->number()++;
-                connection->released() = false;
-                
-                return connection->value();
-            }
-            
-            // Connection found but busy; find next available connection
-            while (true) {
-                count++;
-
-                it = this->_connections.find(host + "-" + std::to_string(count));
-                
-                // Connection not found
-                if (it == this->_connections.end())
-                    break;
-
-                connection = &(* it).second;
-                
                 // Connection available; reserve and return
-                if (connection->released()) {
-                    connection->number()++;
-                    connection->released() = false;
+                if (connection_obj->released()) {
+                    connection_obj->number()++;
+                    connection_obj->released() = false;
                     
-                    return connection->value();
+                    connection = connection_obj->value();
+                } else {
+                    // Connection found but busy; find next available connection
+                    for (;;) {
+                        count++;
+
+                        it = this->_connections.find(host + "-" + std::to_string(count));
+                        
+                        // Connection not found
+                        if (it == this->_connections.end()) break;
+
+                        connection_obj = &(* it).second;
+                        
+                        // Connection available; reserve and return
+                        if (connection_obj->released()) {
+                            connection_obj->number()++;
+                            connection_obj->released() = false;
+                            
+                            connection = connection_obj->value();
+                            break;
+                        }
+                    }
                 }
             }
-
-            return NULL;
-        });
+        }
 
         // Connection not found or unavailable; create new connection
         if (connection == NULL) {
@@ -823,10 +822,10 @@ namespace fetch {
                     std::vector<dns::host> hosts = dns::lookup(url);
 
                     try {
-                        connection = new mysocket::tcp_client(hosts[0].ip(), url.port());
+                        connection = new sockex::tcp_client(hosts[0].ip(), url.port());
                         
                         this->_logger->more("* Connected to " + url.host() + "(" + hosts[0].ip() + ") port " + std::to_string(url.port()));
-                    } catch (mysocket::error& e) {
+                    } catch (sockex::error& e) {
                         throw fetch::error(UNKNOWN_ERROR, statusstr(UNKNOWN_ERROR), e.what());
                     }
                 } catch (dns::error& e) {
@@ -836,12 +835,13 @@ namespace fetch {
             
             // Suffix "host-n"
             if (count) {
-                host += "-" + std::to_string(count);
+                host += "-";
+                host += std::to_string(count);
             }
 
-            _lock(this->_mutex, [this, host, connection]{
-                return this->_connections.try_emplace(host, pool::connection(connection));
-            });
+            std::lock_guard lock(this->_mutex);
+            
+            this->_connections.try_emplace(host, pool::connection(connection));
         } else
             this->_logger->more("* Getting pooled connection for host " + url.host());
 
@@ -851,36 +851,34 @@ namespace fetch {
     void http_client::pool::release(const std::string host, class url url, std::function<void(connection*)> cb) {
         size_t number,
                 timeout;
-
-        if (_lock(this->_mutex, [this, cb, host, &number, &timeout]{
+        {
+            std::lock_guard lock(this->_mutex);
+            
             pool::connection* connection = &this->_connections[host];
 
             cb(connection);
 
             if (connection->number() + 1 == connection->max())
-                return this->_close(host);
-
-            connection->released() = true;
-            number = ++connection->number();
-            
-            return timeout = connection->timeout();
-        }) == 0)
-            return;
+                this->_close(host);
+            else {
+                connection->released() = true;
+                number = ++connection->number();
+                timeout = connection->timeout();
+            }
+        }
 
         this->_threads.push_back(std::thread([timeout, this, host, number](std::string fully_qualified_host) {
             this->_logger->more("* Connection to host " + fully_qualified_host + " left intact");
             
-            for (size_t i = 0; i < timeout * 10 && !this->_shut_down.load(); i++)
+            for (size_t i = 0; i < timeout * 10 && !this->_stop.load(); i++)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
-            _lock(this->_mutex, [this, host, number]{
-                pool::connection* connection = &this->_connections[host];
+            std::lock_guard lock(this->_mutex);
+            
+            pool::connection* connection = &this->_connections[host];
 
-                if (connection->number() == number)
-                    return this->_close(host);
-
-                return (size_t) 0;
-            });
+            if (connection->number() == number)
+                this->_close(host);
         }, url.host()));
     }
 
